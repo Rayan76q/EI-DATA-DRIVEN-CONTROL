@@ -129,12 +129,11 @@ def compute_reward(old_state, state, u, outcome, z_ref=0.0, u_prev=0.0):
     # Velocity penalty
     r_vel = -0.1 * (vz ** 2)
     # Control effort penalty
-    r_act = -0.01 * (u ** 2)
+    r_act = -1.0 * abs(u)
     # Reward staying airborne and discourage abrupt command changes.
-    r_alive = 1.0
-    r_smooth = -0.05 * ((u - u_prev) ** 2)
+    r_smooth = -1.0 * abs(u - u_prev)
 
-    return float(r_alive + r_track + r_vel + r_act + r_smooth )
+    return float(r_track + r_vel + r_act + r_smooth  )
 
 
 class DroneEnv(gym.Env):
