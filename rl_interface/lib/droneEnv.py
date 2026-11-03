@@ -22,10 +22,10 @@ from gymnasium import spaces
 import torch
 
 # Normalization parameters (Z-score statistics from dataset)
-MEAN_U = -0.001812
-SIGMA_U = 0.572652
-MEAN_AZ = -9.849197
-SIGMA_AZ = 11.929603
+MEAN_U = 0.012267900630831718
+SIGMA_U = 1.7312034368515015
+MEAN_AZ = -9.47285652160644
+SIGMA_AZ = 21.485586166381836
 
 # Physical parameters of the system
 PARAMS = SimpleNamespace(
