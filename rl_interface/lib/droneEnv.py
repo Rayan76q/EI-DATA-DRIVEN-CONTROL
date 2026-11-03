@@ -65,56 +65,36 @@ def dynamics(state, u, dt=0.05, rnn_model=None, hidden_state=None, p=PARAMS, int
     Returns:
         tuple: (next_state np.ndarray, next_hidden_state)
     """
-    z, vz, az = state
+    az = state
 
     # Compute next state directly from RNN or nominal dynamics
-    if rnn_model is not None:
-        import torch
-        u_tensor = torch.tensor([[[float(u)]]], dtype=torch.float32)
-        with torch.no_grad():
-            if hasattr(rnn_model, 'rnn') and hasattr(rnn_model, 'head'):
-                out, next_hidden = rnn_model.rnn(u_tensor, hidden_state)
-                pred_tensor = rnn_model.head(out)
-            else:
-                res = rnn_model(u_tensor, hidden_state)
-                if isinstance(res, tuple):
-                    pred_tensor, next_hidden = res
-                else:
-                    pred_tensor = res
-                    next_hidden = hidden_state
-
-            # Convert prediction tensor to 1D numpy array
-            if hasattr(pred_tensor, 'detach'):
-                pred = pred_tensor.detach().cpu().squeeze().numpy()
-            else:
-                pred = np.asarray(pred_tensor).squeeze()
-
-        pred = np.atleast_1d(pred).astype(float)
-
-        if len(pred) >= 3:
-            # RNN outputs [z, vz, az] directly
-            pred_z, pred_vz, pred_az = float(pred[0]), float(pred[1]), float(pred[2])
-            z_next = (z + pred_vz * dt) if integrate_z else pred_z
-            vz_next = pred_vz
-            az_next = pred_az
-        elif len(pred) == 2:
-            # RNN outputs [vz, az] directly
-            pred_vz, pred_az = float(pred[0]), float(pred[1])
-            z_next = z + pred_vz * dt
-            vz_next = pred_vz
-            az_next = pred_az
+    import torch
+    u_tensor = torch.tensor([[[float(u)]]], dtype=torch.float32)
+    with torch.no_grad():
+        if hasattr(rnn_model, 'rnn') and hasattr(rnn_model, 'head'):
+            out, next_hidden = rnn_model.rnn(u_tensor, hidden_state)
+            pred_tensor = rnn_model.head(out)
         else:
-            # RNN outputs [az] only
-            pred_az = float(pred[0])
-            vz_next = vz + pred_az * dt
-            z_next = z + vz_next * dt
-            az_next = pred_az
-    else:
-        # Nominal identified linear dynamics fallback: az = K * u - g
-        next_hidden = hidden_state
-        az_next = float(p.K * u - p.g)
-        vz_next = vz + az_next * dt
-        z_next = z + vz_next * dt
+            res = rnn_model(u_tensor, hidden_state)
+            if isinstance(res, tuple):
+                pred_tensor, next_hidden = res
+            else:
+                pred_tensor = res
+                next_hidden = hidden_state
+
+        # Convert prediction tensor to 1D numpy array
+        if hasattr(pred_tensor, 'detach'):
+            pred = pred_tensor.detach().cpu().squeeze().numpy()
+        else:
+            pred = np.asarray(pred_tensor).squeeze()
+
+    pred = np.atleast_1d(pred).astype(float)
+
+    # RNN outputs [az] only
+    pred_az = float(pred[0])
+    vz_next = vz + pred_az * dt
+    z_next = z + vz_next * dt
+    az_next = pred_az
 
     next_state = np.array([z_next, vz_next, az_next], dtype=np.float32)
     return next_state, next_hidden
