@@ -6,6 +6,8 @@ The drone is a rigid body in a 3D space. State (3 numbers):
     vz      velocity along vertical axis (m/s)
     az      acceleration along vertical axis (m/s²)
 
+The policy observes [z - mission(t), vz, az].
+
 We control all four rotors with the same intensity named u, the movement remains along the vertical axis (Oz).
 The platform to land on is at (x,y,z) = (0, 0, -0.3) (not on the car to begin with)
 
@@ -114,24 +116,25 @@ def dynamics(state, u, dt=0.05, rnn_model=None, hidden_state=None, p=PARAMS, int
     return next_state, next_hidden
 
 
-def compute_reward(old_state, state, u, outcome, z_ref=0.0):
+def compute_reward(old_state, state, u, outcome, z_ref=0.0, u_prev=0.0):
     """Computes the step reward based on mission progress and soft landing."""
     if outcome == "landed":
         return 100.0
-    if outcome in ("crashed", "lost"):
+    if outcome in ("crashed", "lost", "timeout"):
         return -100.0
 
-    z, vz, az = state
+    z, vz, _ = state
     # Tracking error penalty
     r_track = -2.0 * abs(z - z_ref)
     # Velocity penalty
     r_vel = -0.1 * (vz ** 2)
     # Control effort penalty
     r_act = -0.01 * (u ** 2)
-    # Step penalty to promote fast execution
-    r_step = -0.05
+    # Reward staying airborne and discourage abrupt command changes.
+    r_alive = 1.0
+    r_smooth = -0.05 * ((u - u_prev) ** 2)
 
-    return float(r_track + r_vel + r_act + r_step)
+    return float(r_alive + r_track + r_vel + r_act + r_smooth )
 
 
 class DroneEnv(gym.Env):
@@ -148,8 +151,8 @@ class DroneEnv(gym.Env):
         # Action: single control intensity u in [-3.0, 3.0]
         self.action_space = spaces.Box(low=-3.0, high=3.0, shape=(1,), dtype=np.float32)
 
-        # Observation: physical state [z, vz, az]
-        high = np.array([Z_MAX, 20.0, 100.0], dtype=np.float32)
+        # Observation: altitude error, vertical velocity, acceleration.
+        high = np.array([np.inf, 20.0, 100.0], dtype=np.float32)
         self.observation_space = spaces.Box(
             low=-high,
             high=high,
@@ -164,17 +167,22 @@ class DroneEnv(gym.Env):
         self.az_prev = -self.p.g
 
     def _obs(self):
-        """Returns physical state observation [z, vz, az]."""
-        return self.state.copy().astype(np.float32)
+        """Return [z - z_ref, vz, az], keeping the physical state unchanged."""
+        obs = self.state.copy().astype(np.float32)
+        obs[0] -= mission(self.t)
+        return obs
 
     def outcome(self):
-        """Determines the flight status: 'flying', 'landed', 'crashed', or 'lost'."""
+        """Return flying, landed, crashed, lost, or timeout at the mission deadline."""
         z, vz, _ = self.state
         if z <= Z_LAND:
             soft = abs(vz) <= SAFE_VZ
-            return "landed" if soft else "crashed"
+            landing_phase = mission(self.t) == Z_LAND
+            return "landed" if soft and landing_phase else "crashed"
         if z > Z_MAX:
             return "lost"
+        if self.steps >= self.max_steps:
+            return "timeout"
         return "flying"
 
     def reset(self, seed=None, options=None):
@@ -229,10 +237,10 @@ class DroneEnv(gym.Env):
         status = self.outcome()
 
         z_ref = mission(self.t)
-        reward = compute_reward(old, self.state, u, status, z_ref=z_ref)
+        reward = compute_reward(old, self.state, u, status, z_ref=z_ref, u_prev=self.u_prev)
 
         terminated = (status != "flying")
-        truncated = (self.steps >= self.max_steps and not terminated)
+        truncated = False  # The mission deadline is a terminal failure, not a rollout cutoff.
 
         # Measurements dictionary required by export_policy.py and Simulink evaluation
         info = {
@@ -241,7 +249,7 @@ class DroneEnv(gym.Env):
                 "t": self.t,
                 "z": float(self.state[0]),
                 "vz": float(self.state[1]),
-                "az_prev": float(self.az_prev),
+                "az_prev": float(self.state[2]),  # Same available acceleration as _obs().
                 "z_ref": float(z_ref),
                 "u_prev": float(self.u_prev)
             }
