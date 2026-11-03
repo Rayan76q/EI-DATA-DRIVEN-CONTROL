@@ -112,11 +112,12 @@ class ModelNN(nn.Module):
         
         self.head = nn.Linear(hidden_size, output_size)
         
-    def forward(self, x):
-        h, _ = self.rnn(x)
-        return self.head(h)
+    def forward(self, x, h=None):
+        h_new, _ = self.rnn(x, h)
+        return self.head(h_new), h_new
     
-model = ModelNN(1, 1, "RNN", 32, 1)
+hidden_layer_size = 32
+model = ModelNN(1, 1, "RNN", hidden_layer_size, 1)
 model = model.to(device)
 
 epochs = 700
@@ -141,7 +142,7 @@ for epoch in range(epochs):
         y_batch = y_batch.unsqueeze(-1).to(device)
         
         optimizer.zero_grad()
-        outputs = model(u_batch)
+        outputs = model(u_batch)[0]
         
         loss = criterion(outputs, y_batch)
         loss.backward()
@@ -161,7 +162,7 @@ for epoch in range(epochs):
             u_batch = u_batch.unsqueeze(-1).to(device)
             y_batch = y_batch.unsqueeze(-1).to(device)
             
-            outputs = model(u_batch)
+            outputs = model(u_batch)[0]
                     
             loss = criterion(outputs, y_batch)
             running_loss += loss.item()
@@ -171,11 +172,29 @@ for epoch in range(epochs):
 # saving the model
 
 # saving as onnx
-example_inputs = (torch.randn(1, 1000, 1),)
 model = model.to("cpu")
+model.eval()
+
+torch.save(model.state_dict(), "rnn_model_robust.pt")
+
 from torch.export import Dim
+import torch
+
+batch_dim = Dim("batch")
+time_dim = Dim("time")
+
+example_inputs = (
+    torch.randn(1, 1, 1), 
+    torch.zeros(1, 1, hidden_layer_size)
+)
+
 onnx_program = torch.onnx.export(
-      model, example_inputs, dynamo=True,
-      dynamic_shapes={"x": {0: Dim("batch"), 1: Dim("time")}},
-  )
-onnx_program.save("rnn_model2.onnx")
+    model, 
+    example_inputs, 
+    dynamo=True,
+    dynamic_shapes={
+        "x": {0: batch_dim, 1: time_dim}, 
+        "h": {1: batch_dim}
+    },
+)
+onnx_program.save("rnn_model_robust.onnx")
