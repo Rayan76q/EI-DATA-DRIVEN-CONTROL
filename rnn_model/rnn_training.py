@@ -1,0 +1,193 @@
+import numpy as np
+import matplotlib.pyplot as plt
+
+import torch
+from torch import nn
+from torch.utils.data import Dataset, DataLoader
+
+device = "cuda" if torch.cuda.is_available() else "cpu"
+
+# data import
+
+data_in = np.genfromtxt("rnn_input_z.csv", delimiter=",", dtype=np.float32)[:, :1000]
+data_out = np.genfromtxt("rnn_output_z.csv", delimiter=",", dtype=np.float32)[:, :3000]
+nb_data = data_in.shape[0]
+
+# data standardization
+
+def normalize(input_array):
+    min_val = np.min(input_array)
+    max_val = np.max(input_array)
+    
+    return (input_array - min_val) / (max_val - min_val)
+
+def standardize(input_array):
+    return (input_array - np.mean(input_array)) / np.std(input_array), np.mean(input_array), np.std(input_array)
+def mimic_standardize(input_array, mean_mimic, std_mimic):
+    return (input_array - mean_mimic) / std_mimic
+
+# dataset module
+
+class DataModule(Dataset):
+    def __init__(self, data_u, data_y):
+        super().__init__()
+        self.N = data_u.shape[0]
+        self.data_u = data_u
+        self.data_y = data_y
+        
+    def __len__(self):
+        return self.N
+
+    def __getitem__(self, index):
+        return self.data_u[index], self.data_y[index]
+
+batch_size = 32
+
+# z_data = data_out[:, ::3]
+# vz_data = data_out[:, 1::3]
+az_data = data_out[:, 2::3]
+
+train_size = int(0.7*nb_data)
+val_size = int(0.15*nb_data)
+test_size = nb_data - train_size - val_size
+
+# z_train, z_mean, z_std = standardize(z_data[:train_size])
+# z_val = mimic_standardize(z_data[train_size:train_size+val_size], z_mean, z_std)
+# z_test = mimic_standardize(z_data[train_size+val_size:nb_data], z_mean, z_std)
+# vz_train, vz_mean, vz_std = standardize(vz_data[:train_size])
+# vz_val = mimic_standardize(vz_data[train_size:train_size+val_size], vz_mean, vz_std)
+# vz_test = mimic_standardize(vz_data[train_size+val_size:nb_data], vz_mean, vz_std)
+input_train, input_mean, input_std = standardize(data_in[:train_size])
+input_val = mimic_standardize(data_in[train_size:train_size+val_size], input_mean, input_std)
+input_test = mimic_standardize(data_in[train_size+val_size:nb_data], input_mean, input_std)
+
+az_train, az_mean, az_std = standardize(az_data[:train_size])
+az_val = mimic_standardize(az_data[train_size:train_size+val_size], az_mean, az_std)
+az_test = mimic_standardize(az_data[train_size+val_size:nb_data], az_mean, az_std)
+
+print("VALUES TO KEEP :")
+print(f"input_mean = {input_mean}, input_std = {input_std}")
+print(f"az_mean = {az_mean}, az_std = {az_std}")
+
+# z_train_torch = torch.tensor(z_train, dtype=torch.float32)
+# z_val_torch = torch.tensor(z_val, dtype=torch.float32)
+# z_test_torch = torch.tensor(z_test, dtype=torch.float32)
+
+# vz_train_torch = torch.tensor(vz_train, dtype=torch.float32)
+# vz_val_torch = torch.tensor(vz_val, dtype=torch.float32)
+# vz_test_torch = torch.tensor(vz_test, dtype=torch.float32)
+
+az_train_torch = torch.tensor(az_train, dtype=torch.float32)
+az_val_torch = torch.tensor(az_val, dtype=torch.float32)
+az_test_torch = torch.tensor(az_test, dtype=torch.float32)
+
+train_dataset = DataModule(torch.tensor(input_train, dtype=torch.float32), az_train_torch)
+val_dataset = DataModule(torch.tensor(input_val, dtype=torch.float32), az_val_torch)
+test_dataset = DataModule(torch.tensor(input_test, dtype=torch.float32), az_test_torch)
+
+train_dataloader = DataLoader(train_dataset, batch_size, shuffle=True)
+val_dataloader = DataLoader(val_dataset, batch_size)
+test_dataloader = DataLoader(test_dataset, batch_size)
+
+
+# model definition
+
+class ModelNN(nn.Module):
+    def __init__(
+        self,
+        input_size: int = 1,
+        output_size: int = 1,
+        rnn_type: str = "RNN",  # "RNN", "LSTM", "GRU"
+        hidden_size: int = 16,
+        num_layers: int = 1,
+        dropout: float = 0.0
+    ):
+        super().__init__()
+        
+        # Select and initialize the RNN type
+        if rnn_type.upper() == "LSTM":
+            self.rnn = nn.LSTM(
+                input_size=input_size,
+                hidden_size=hidden_size,
+                num_layers=num_layers,
+                dropout=dropout if num_layers > 1 else 0.0,
+                batch_first=True
+            )
+        elif rnn_type.upper() == "GRU":
+            self.rnn = nn.GRU(
+                input_size=input_size,
+                hidden_size=hidden_size,
+                num_layers=num_layers,
+                dropout=dropout if num_layers > 1 else 0.0,
+                batch_first=True
+            )
+        elif rnn_type.upper() == "RNN":
+            self.rnn = nn.RNN(
+                input_size=input_size,
+                hidden_size=hidden_size,
+                num_layers=num_layers,
+                nonlinearity='tanh',
+                dropout=dropout if num_layers > 1 else 0.0,
+                batch_first=True
+            )
+        
+        self.head = nn.Linear(hidden_size, output_size)
+        
+    def forward(self, x):
+        h, _ = self.rnn(x)
+        return self.head(h)
+    
+model = ModelNN(1, 1, "RNN", 32, 1)
+model = model.to(device)
+
+optimizer = torch.optim.Adam(model.parameters(), lr=4e-4)
+criterion = nn.MSELoss()
+
+# training loop
+
+epochs = 500
+
+for epoch in range(epochs):
+    running_loss = 0.0
+    model.train()
+    for i, (u_batch, y_batch) in enumerate(train_dataloader):
+        u_batch = u_batch.unsqueeze(-1).to(device)
+        y_batch = y_batch.unsqueeze(-1).to(device)
+        
+        optimizer.zero_grad()
+        outputs = model(u_batch)
+        
+        loss = criterion(outputs, y_batch)
+        loss.backward()
+        torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+        running_loss += loss.item()
+        
+        optimizer.step()
+    
+    print(f"Epoch : {epoch+1}, Loss : {(running_loss / len(train_dataloader)):.4f}")
+    
+    model.eval()
+    running_loss = 0.0
+    for u_batch, y_batch in val_dataloader:
+        with torch.no_grad():
+            u_batch = u_batch.unsqueeze(-1).to(device)
+            y_batch = y_batch.unsqueeze(-1).to(device)
+            
+            outputs = model(u_batch)
+                    
+            loss = criterion(outputs, y_batch)
+            running_loss += loss.item()
+    
+    print(f"Val Loss : {(running_loss / len(val_dataloader)):.4f}\n --------")
+
+# saving the model
+
+# saving as onnx
+example_inputs = (torch.randn(1, 1000, 1),)
+model = model.to("cpu")
+from torch.export import Dim
+onnx_program = torch.onnx.export(
+      model, example_inputs, dynamo=True,
+      dynamic_shapes={"x": {0: Dim("batch"), 1: Dim("time")}},
+  )
+onnx_program.save("rnn_model.onnx")
