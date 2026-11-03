@@ -21,11 +21,20 @@ import gymnasium as gym
 from gymnasium import spaces
 import torch
 
+# Normalization parameters (Z-score statistics from dataset)
+MEAN_U = -0.001812
+SIGMA_U = 0.572652
+MEAN_AZ = -9.849197
+SIGMA_AZ = 11.929603
+
 # Physical parameters of the system
 PARAMS = SimpleNamespace(
-    dt=0.05,       # Sampling period (s)
-    g=9.816,       # Gravitational acceleration (m/s²)
-    K=18.3424,     # Static gain from control u to vertical acceleration az
+    dt=0.05,            # Sampling period (s)
+    g=9.816,            # Gravitational acceleration (m/s²)
+    mean_u=MEAN_U,
+    sigma_u=SIGMA_U,
+    mean_az=MEAN_AZ,
+    sigma_az=SIGMA_AZ,
 )
 
 # Landing and operational thresholds
@@ -33,9 +42,6 @@ Z_LAND = -0.3          # Landing platform altitude along vertical axis (m)
 Z_MAX = 5.0            # Ceiling altitude limit (m)
 SAFE_VZ = 0.5          # Maximum vertical touchdown speed for soft landing (m/s)
 MAX_STEPS = 200        # Mission length: 10 s at Ts = 0.05 s
-
-# Scaling factors to normalize observations around order 1
-OBS_SCALE = np.array([1.0, 1.0, 10.0], dtype=np.float32)
 
 
 def mission(t):
@@ -51,50 +57,58 @@ def mission(t):
 def dynamics(state, u, dt=0.05, rnn_model=None, hidden_state=None, p=PARAMS, integrate_z=False):
     """Calculates next state [z, vz, az] and next recurrent hidden state.
 
-    When rnn_model is provided, vz and az (and z) are obtained directly from
-    the RNN predictions.
+    The input u is in standardized units [-3, 3].
+    When rnn_model is provided, it predicts normalized az, which is then
+    denormalized to physical units (m/s²).
 
     Args:
         state (np.ndarray): Current state [z, vz, az].
-        u (float): Control input command in [-1, 1].
+        u (float): Control input command in [-3, 3].
         dt (float): Integration time step in seconds.
-        rnn_model (optional): Trained PyTorch RNN/LSTM/GRU model predicting [z, vz, az].
+        rnn_model (optional): Trained PyTorch RNN/LSTM/GRU model predicting normalized az.
         hidden_state (optional): Previous hidden state tensor of the RNN.
-        p (SimpleNamespace): Physical parameters (dt, g, K).
-        integrate_z (bool): If True, integrates z from predicted vz instead of using predicted z directly.
+        p (SimpleNamespace): Physical and normalization parameters.
+        integrate_z (bool): Unused when predicting az only.
 
     Returns:
         tuple: (next_state np.ndarray, next_hidden_state)
     """
     z, vz, az = state
 
-    # Compute next state directly from RNN or nominal dynamics
-    u_tensor = torch.tensor([[[float(u)]]], dtype=torch.float32)
-    with torch.no_grad():
-        if hasattr(rnn_model, 'rnn') and hasattr(rnn_model, 'head'):
-            out, next_hidden = rnn_model.rnn(u_tensor, hidden_state)
-            pred_tensor = rnn_model.head(out)
-        else:
-            res = rnn_model(u_tensor, hidden_state)
-            if isinstance(res, tuple):
-                pred_tensor, next_hidden = res
+    if rnn_model is not None:
+        u_tensor = torch.tensor([[[float(u)]]], dtype=torch.float32)
+        with torch.no_grad():
+            if hasattr(rnn_model, 'rnn') and hasattr(rnn_model, 'head'):
+                out, next_hidden = rnn_model.rnn(u_tensor, hidden_state)
+                pred_tensor = rnn_model.head(out)
             else:
-                pred_tensor = res
-                next_hidden = hidden_state
+                res = rnn_model(u_tensor, hidden_state)
+                if isinstance(res, tuple):
+                    pred_tensor, next_hidden = res
+                else:
+                    pred_tensor = res
+                    next_hidden = hidden_state
 
-        # Convert prediction tensor to 1D numpy array
-        if hasattr(pred_tensor, 'detach'):
-            pred = pred_tensor.detach().cpu().squeeze().numpy()
-        else:
-            pred = np.asarray(pred_tensor).squeeze()
+            if hasattr(pred_tensor, 'detach'):
+                pred = pred_tensor.detach().cpu().squeeze().numpy()
+            else:
+                pred = np.asarray(pred_tensor).squeeze()
 
-    pred = np.atleast_1d(pred).astype(float)
+        pred = np.atleast_1d(pred).astype(float)
+        pred_az_norm = float(pred[0])
 
-    # RNN outputs [az] only
-    pred_az = float(pred[0])
-    vz_next = vz + pred_az * dt
+        # Dénormalisation de az : valeur physique en m/s²
+        az_phys = pred_az_norm * p.sigma_az + p.mean_az
+    else:
+        next_hidden = hidden_state
+        # Baseline sans RNN : u étant standardisé dans [-3, 3], on dénormalise u
+        u_phys = float(u * p.sigma_u + p.mean_u)
+        az_phys = float(18.3424 * u_phys - p.g)
+
+    # Intégration cinématique physique
+    vz_next = vz + az_phys * dt
     z_next = z + vz_next * dt
-    az_next = pred_az
+    az_next = az_phys
 
     next_state = np.array([z_next, vz_next, az_next], dtype=np.float32)
     return next_state, next_hidden
@@ -131,14 +145,14 @@ class DroneEnv(gym.Env):
         self.rnn_model = rnn_model
         self.integrate_z = integrate_z
 
-        # Action: single control intensity u in [-1.0, 1.0]
-        self.action_space = spaces.Box(low=-1.0, high=1.0, shape=(1,), dtype=np.float32)
+        # Action: single control intensity u in [-3.0, 3.0]
+        self.action_space = spaces.Box(low=-3.0, high=3.0, shape=(1,), dtype=np.float32)
 
-        # Observation: normalized state [z, vz, az] / OBS_SCALE
-        high = np.array([Z_MAX, 10.0, 50.0], dtype=np.float32) / OBS_SCALE
+        # Observation: physical state [z, vz, az]
+        high = np.array([Z_MAX, 20.0, 100.0], dtype=np.float32)
         self.observation_space = spaces.Box(
-            low=-high.astype(np.float32),
-            high=high.astype(np.float32),
+            low=-high,
+            high=high,
             dtype=np.float32
         )
 
@@ -150,13 +164,8 @@ class DroneEnv(gym.Env):
         self.az_prev = -self.p.g
 
     def _obs(self):
-        """Returns normalized state observation."""
-        normalized = self.state / OBS_SCALE
-        return np.clip(
-            normalized,
-            self.observation_space.low,
-            self.observation_space.high
-        ).astype(np.float32)
+        """Returns physical state observation [z, vz, az]."""
+        return self.state.copy().astype(np.float32)
 
     def outcome(self):
         """Determines the flight status: 'flying', 'landed', 'crashed', or 'lost'."""
@@ -201,9 +210,7 @@ class DroneEnv(gym.Env):
 
     def step(self, action):
         """Performs one environment step under control input u."""
-        u = float(np.clip(np.asarray(action, dtype=np.float32).reshape(-1)[0], -1.0, 1.0))
-        # Should we clip the input there ? If the rnn model does not predict abnormaly
-        # high values, it should not be needed
+        u = float(np.clip(np.asarray(action, dtype=np.float32).reshape(-1)[0], -3.0, 3.0))
         old = self.state
 
         # Update physical state and internal model memory
