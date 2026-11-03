@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import torch
 from torch import nn
 from torch.utils.data import Dataset, DataLoader
+from torch.optim.lr_scheduler import LinearLR, CosineAnnealingLR, SequentialLR
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -43,50 +44,28 @@ class DataModule(Dataset):
 
 batch_size = 32
 
-# z_data = data_out[:, ::3]
-# vz_data = data_out[:, 1::3]
 az_data = data_out[:, 2::3]
 
-train_size = int(0.7*nb_data)
-val_size = int(0.15*nb_data)
-test_size = nb_data - train_size - val_size
+train_size = int(0.9*nb_data)
+test_size = nb_data - train_size
 
-# z_train, z_mean, z_std = standardize(z_data[:train_size])
-# z_val = mimic_standardize(z_data[train_size:train_size+val_size], z_mean, z_std)
-# z_test = mimic_standardize(z_data[train_size+val_size:nb_data], z_mean, z_std)
-# vz_train, vz_mean, vz_std = standardize(vz_data[:train_size])
-# vz_val = mimic_standardize(vz_data[train_size:train_size+val_size], vz_mean, vz_std)
-# vz_test = mimic_standardize(vz_data[train_size+val_size:nb_data], vz_mean, vz_std)
 input_train, input_mean, input_std = standardize(data_in[:train_size])
-input_val = mimic_standardize(data_in[train_size:train_size+val_size], input_mean, input_std)
-input_test = mimic_standardize(data_in[train_size+val_size:nb_data], input_mean, input_std)
+input_test = mimic_standardize(data_in[train_size:nb_data], input_mean, input_std)
 
 az_train, az_mean, az_std = standardize(az_data[:train_size])
-az_val = mimic_standardize(az_data[train_size:train_size+val_size], az_mean, az_std)
-az_test = mimic_standardize(az_data[train_size+val_size:nb_data], az_mean, az_std)
+az_test = mimic_standardize(az_data[train_size:nb_data], az_mean, az_std)
 
 print("VALUES TO KEEP :")
 print(f"input_mean = {input_mean}, input_std = {input_std}")
 print(f"az_mean = {az_mean}, az_std = {az_std}")
 
-# z_train_torch = torch.tensor(z_train, dtype=torch.float32)
-# z_val_torch = torch.tensor(z_val, dtype=torch.float32)
-# z_test_torch = torch.tensor(z_test, dtype=torch.float32)
-
-# vz_train_torch = torch.tensor(vz_train, dtype=torch.float32)
-# vz_val_torch = torch.tensor(vz_val, dtype=torch.float32)
-# vz_test_torch = torch.tensor(vz_test, dtype=torch.float32)
-
 az_train_torch = torch.tensor(az_train, dtype=torch.float32)
-az_val_torch = torch.tensor(az_val, dtype=torch.float32)
 az_test_torch = torch.tensor(az_test, dtype=torch.float32)
 
 train_dataset = DataModule(torch.tensor(input_train, dtype=torch.float32), az_train_torch)
-val_dataset = DataModule(torch.tensor(input_val, dtype=torch.float32), az_val_torch)
 test_dataset = DataModule(torch.tensor(input_test, dtype=torch.float32), az_test_torch)
 
 train_dataloader = DataLoader(train_dataset, batch_size, shuffle=True)
-val_dataloader = DataLoader(val_dataset, batch_size)
 test_dataloader = DataLoader(test_dataset, batch_size)
 
 
@@ -140,12 +119,19 @@ class ModelNN(nn.Module):
 model = ModelNN(1, 1, "RNN", 32, 1)
 model = model.to(device)
 
-optimizer = torch.optim.Adam(model.parameters(), lr=4e-4)
+epochs = 700
+
+total_steps = epochs * len(train_dataloader)
+warmup_steps = int(0.1 * total_steps)
+
+optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+scheduler_warmup = LinearLR(optimizer, start_factor=0.001, end_factor=1.0, total_iters=warmup_steps)
+scheduler_cosine = CosineAnnealingLR(optimizer, T_max=total_steps - warmup_steps)
+scheduler = SequentialLR(optimizer, schedulers=[scheduler_warmup, scheduler_cosine], milestones=[warmup_steps])
+
 criterion = nn.MSELoss()
 
 # training loop
-
-epochs = 500
 
 for epoch in range(epochs):
     running_loss = 0.0
@@ -163,12 +149,14 @@ for epoch in range(epochs):
         running_loss += loss.item()
         
         optimizer.step()
+        scheduler.step()
     
-    print(f"Epoch : {epoch+1}, Loss : {(running_loss / len(train_dataloader)):.4f}")
+    print(f"Epoch : {epoch+1}, Loss : {(running_loss / len(train_dataloader)):.5f}")
+    print(f"Current Learning Rate : {scheduler.get_last_lr()[0]:.6f}")
     
     model.eval()
     running_loss = 0.0
-    for u_batch, y_batch in val_dataloader:
+    for u_batch, y_batch in test_dataloader:
         with torch.no_grad():
             u_batch = u_batch.unsqueeze(-1).to(device)
             y_batch = y_batch.unsqueeze(-1).to(device)
@@ -178,7 +166,7 @@ for epoch in range(epochs):
             loss = criterion(outputs, y_batch)
             running_loss += loss.item()
     
-    print(f"Val Loss : {(running_loss / len(val_dataloader)):.4f}\n --------")
+    print(f"Test Loss : {(running_loss / len(test_dataloader)):.5f}\n --------")
 
 # saving the model
 
@@ -190,4 +178,4 @@ onnx_program = torch.onnx.export(
       model, example_inputs, dynamo=True,
       dynamic_shapes={"x": {0: Dim("batch"), 1: Dim("time")}},
   )
-onnx_program.save("rnn_model.onnx")
+onnx_program.save("rnn_model2.onnx")
