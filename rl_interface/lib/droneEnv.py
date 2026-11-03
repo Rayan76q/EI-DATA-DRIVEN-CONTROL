@@ -19,6 +19,7 @@ from types import SimpleNamespace
 import numpy as np
 import gymnasium as gym
 from gymnasium import spaces
+import torch
 
 # Physical parameters of the system
 PARAMS = SimpleNamespace(
@@ -65,10 +66,9 @@ def dynamics(state, u, dt=0.05, rnn_model=None, hidden_state=None, p=PARAMS, int
     Returns:
         tuple: (next_state np.ndarray, next_hidden_state)
     """
-    az = state
+    z, vz, az = state
 
     # Compute next state directly from RNN or nominal dynamics
-    import torch
     u_tensor = torch.tensor([[[float(u)]]], dtype=torch.float32)
     with torch.no_grad():
         if hasattr(rnn_model, 'rnn') and hasattr(rnn_model, 'head'):
