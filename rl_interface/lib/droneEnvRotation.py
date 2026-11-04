@@ -12,14 +12,14 @@ The drone is a rigid body in 3D space with 18 state variables:
 Quadrotor control (Symmetric Differential Formulation):
     - Action space: 2 control inputs [u_base, u_diff] in [-3.0, 3.0]^2:
         * u[0] (u_base): collective thrust applied to all 4 motors.
-        * u[1] (u_diff): differential yaw command applied symmetrically (+u_diff on diag 1, -u_diff on diag 2).
+        * u[1] (u_diff): differential yaw command using the configured motor signs.
     - 4 motor commands sent to RNN:
-        u_motors = [u_base + u_diff, u_base - u_diff, u_base + u_diff, u_base - u_diff]
+        u_motors = clip(u_base + u_diff * yaw_motor_signs, -3, 3)
     - RNN predicts: [az, w_dot_x, w_dot_y, w_dot_z].
 
 Observation space (12 variables):
     [z - z_ref, vz, az,
-     theta, phi, psi - psi_ref,
+     theta - theta_ref, phi - phi_ref, psi - psi_ref,
      wx, wx_dot,
      wy, wy_dot,
      wz, wz_dot]
@@ -31,18 +31,24 @@ import gymnasium as gym
 from gymnasium import spaces
 import torch
 
-# Normalization parameters (Z-score statistics from dataset)
-MEAN_U = -0.004098882433027029
-SIGMA_U = 1.7267645597457886
-MEAN_AZ = -9.68746566772461
-SIGMA_AZ = 21.440523147583008
+# Training normalization for rnn_model_z_and_angles, supplied per channel.
+# Input order: [u1, u2, u3, u4]. Normalize after allocating motor commands.
+MEAN_U = np.array([0.0230, 0.0227, 0.0228, 0.0230], dtype=np.float32)
+SIGMA_U = np.array([1.7386, 1.7386, 1.7389, 1.7389], dtype=np.float32)
+# Output order: [az, wx_dot, wy_dot, wz_dot].
+MEAN_AZ = -9.7264
+SIGMA_AZ = 17.3450
+MEAN_WX_DOT = -2.5107e-03
+SIGMA_WX_DOT = 1.0602
+MEAN_WY_DOT = -1.5441e-02
+SIGMA_WY_DOT = 1.0702
+MEAN_WZ_DOT = 4.0882e-04
+SIGMA_WZ_DOT = 0.6968
 
-MEAN_WX_DOT = 0.0
-SIGMA_WX_DOT = 1.0
-MEAN_WY_DOT = 0.0
-SIGMA_WY_DOT = 1.0
-MEAN_WZ_DOT = 0.0
-SIGMA_WZ_DOT = 1.0
+# Motor order is [u1, u2, u3, u4]. Probing the learned yaw acceleration gives
+# positive response for motors 1 & 3 and negative for motors 2 & 4. Use these
+# model-defined yaw pairs; the visualizer's numbering is not a dynamics map.
+YAW_MOTOR_SIGNS = np.array([1.0, -1.0, 1.0, -1.0], dtype=np.float32)
 
 # Physical parameters of the system
 PARAMS = SimpleNamespace(
@@ -58,6 +64,7 @@ PARAMS = SimpleNamespace(
     sigma_wy_dot=SIGMA_WY_DOT,
     mean_wz_dot=MEAN_WZ_DOT,
     sigma_wz_dot=SIGMA_WZ_DOT,
+    yaw_motor_signs=YAW_MOTOR_SIGNS,
 )
 
 # Landing and operational thresholds
@@ -66,19 +73,31 @@ Z_MAX = 10.0           # Ceiling altitude limit (m)
 SAFE_VZ = 0.5          # Maximum vertical touchdown speed for soft landing (m/s)
 SAFE_VX = 0.5
 SAFE_VY = 0.5
+SAFE_TILT = np.deg2rad(10.0)  # Maximum roll/pitch error at touchdown (rad)
+SAFE_ANGULAR_SPEED = 0.5     # Maximum angular-speed norm at touchdown (rad/s)
 MAX_STEPS = 200        # Mission length: 10 s at Ts = 0.05 s
 
 
 def default_mission(t):
-    """Target reference altitude z_ref and target yaw angle psi_ref at time t (seconds)."""
+    """Return (z_ref, theta_ref, phi_ref, psi_ref), with level attitude targets."""
     if t < 2.0:
-        return (0.0, 0.0)                 # Step 1: On the platform (z = 0)
+        return (0.0, 0.0, 0.0, 0.0)       # Step 1: On the platform (z = 0)
     elif t < 5.0:
-        return (1.0, 0.0)                 # Step 2: Climb and hold altitude (z = 1.0)
+        return (1.0, 0.0, 0.0, 0.0)       # Step 2: Climb and hold altitude (z = 1.0)
     elif t < 8.0:
-        return (1.0, float(2.0 * np.pi * (t - 5.0) / 3.0))  # Step 3: Hold altitude and complete 360° yaw turn
+        return (1.0, 0.0, 0.0, float(2.0 * np.pi * (t - 5.0) / 3.0))
     else:
-        return (Z_LAND, 0.0)              # Step 4: Descend and land on platform (z = -0.3)
+        return (Z_LAND, 0.0, 0.0, float(2.0 * np.pi))  # Land holding the completed turn
+
+
+def mission_reference(reference):
+    """Read all attitude targets; older (z_ref, psi_ref) missions stay level."""
+    if len(reference) == 2:
+        z_ref, psi_ref = reference
+        return z_ref, 0.0, 0.0, psi_ref
+    if len(reference) == 4:
+        return tuple(reference)
+    raise ValueError("mission must return (z_ref, theta_ref, phi_ref, psi_ref)")
 
 
 # Backward-compatible import for notebooks using the original function name.
@@ -113,17 +132,10 @@ def dynamics(state, u, dt=0.05, rnn_model=None, hidden_state=None, p=PARAMS, int
     if len(u_arr) < 2:
         u_arr = np.pad(u_arr, (0, 2 - len(u_arr)), mode='edge')
 
-    # Symmetric differential allocation to 4 motors:
-    # Diagonal 1 (motors 1 & 3): u_base + u_diff
-    # Diagonal 2 (motors 2 & 4): u_base - u_diff
+    # Allocate in the RNN's motor order and enforce each motor's command limit.
     u_base = float(u_arr[0])
     u_diff = float(u_arr[1])
-    u_motors = np.array([
-        u_base + u_diff,
-        u_base - u_diff,
-        u_base + u_diff,
-        u_base - u_diff
-    ], dtype=np.float32)
+    u_motors = np.clip(u_base + u_diff * p.yaw_motor_signs, -3.0, 3.0)
 
     # Normalize 4 motor inputs before entering the RNN
     u_norm = (u_motors - p.mean_u) / p.sigma_u
@@ -182,11 +194,12 @@ def dynamics(state, u, dt=0.05, rnn_model=None, hidden_state=None, p=PARAMS, int
     wz_next = wz + wz_dot_phys * dt
 
     # 4. Attitude propagation (Euler angle kinematic rates)
-    phi_dot = wx_next + np.sin(phi) * np.tan(theta) * wy_next + np.cos(phi) * np.tan(theta) * wz_next
-    theta_dot = np.cos(phi) * wy_next - np.sin(phi) * wz_next
+    phi_dot = wx + np.sin(phi) * np.tan(theta) * wy + np.cos(phi) * np.tan(theta) * wz
+    theta_dot = np.cos(phi) * wy - np.sin(phi) * wz
     cos_theta = np.cos(theta)
-    if abs(cos_theta) > 1e-4:
-        psi_dot = (np.sin(phi) * wy_next + np.cos(phi) * wz_next) / cos_theta
+
+    if abs(cos_theta) > 1e-8:
+        psi_dot = (np.sin(phi) * wy + np.cos(phi) * wz) / cos_theta
     else:
         psi_dot = wz_next
 
@@ -213,8 +226,8 @@ def dynamics(state, u, dt=0.05, rnn_model=None, hidden_state=None, p=PARAMS, int
     return next_state, next_hidden
 
 
-def compute_reward(old_state, state, u, outcome, target_ref=(0.0, 0.0), u_prev=None):
-    """Computes the step reward based on altitude tracking, yaw orientation, and landing."""
+def compute_reward(old_state, state, u, outcome, target_ref=(0.0, 0.0), u_prev=None, dt=PARAMS.dt):
+    """Integrate running costs over dt; keep terminal success/failure rewards fixed."""
     hubber_loss = lambda x, delta=1.0: 0.5 * x**2 if abs(x) <= delta else delta * (abs(x) - 0.5 * delta)
 
     if isinstance(outcome, tuple):
@@ -227,7 +240,7 @@ def compute_reward(old_state, state, u, outcome, target_ref=(0.0, 0.0), u_prev=N
     if z_status in ("crashed", "lost", "timeout"):
         return -1000.0
 
-    z_ref, psi_ref = target_ref
+    z_ref, theta_ref, phi_ref, psi_ref = mission_reference(target_ref)
     z = state[0]
     vz = state[1]
     theta = state[9]
@@ -236,21 +249,23 @@ def compute_reward(old_state, state, u, outcome, target_ref=(0.0, 0.0), u_prev=N
     wz = state[16]
 
     # Altitude tracking penalty
-    r_z = -10.0 * hubber_loss(z - z_ref)
+    r_z = -20.0 * hubber_loss(z - z_ref)
 
-    # Yaw angle tracking penalty (normalized to [-pi, pi])
-    psi_err = (psi - psi_ref + np.pi) % (2.0 * np.pi) - np.pi
+    # Track accumulated positive rotation, keeping 0 and 2π distinct.
+    psi_err = psi - psi_ref
     r_psi = -10.0 * hubber_loss(psi_err)
 
     # Off-axis angular deviation penalties
-    r_angles = -2.0 * (abs(theta) + abs(phi))
+    r_angles = -10.0 * (abs(theta - theta_ref) + abs(phi - phi_ref))
 
     # Velocity penalties
     r_vel = -1.0 * hubber_loss(vz) - 0.5 * hubber_loss(wz)
 
-    # Control effort penalty (sum of squares of [u_base, u_diff])
-    u_arr = np.asarray(u, dtype=np.float32)
-    r_act = -1.0 * float(np.sum(u_arr ** 2))
+    # Penalize differential effort so collective thrust remains the cheaper lift input.
+    u_arr = np.asarray(u, dtype=np.float32).reshape(-1)
+
+    # The second element of u_arr is the differential effort, which should be penalized.
+    r_act = -1.0 * float(u_arr[1] ** 2)
 
     # Smoothness penalty
     if u_prev is not None:
@@ -259,7 +274,8 @@ def compute_reward(old_state, state, u, outcome, target_ref=(0.0, 0.0), u_prev=N
     else:
         r_smooth = 0.0
 
-    return float(r_z + r_psi + r_angles + r_vel + r_act + r_smooth)
+
+    return float(dt * (r_z + r_psi + r_angles + r_vel + r_act + r_smooth))
 
 
 class DroneEnv(gym.Env):
@@ -284,14 +300,14 @@ class DroneEnv(gym.Env):
         self.integrate_z = integrate_z
         self.mission = mission if mission is not None else default_mission
         if not callable(self.mission):
-            raise TypeError("mission must be callable: mission(t) -> (z_ref, psi_ref)")
+            raise TypeError("mission must be callable: mission(t) -> (z_ref, theta_ref, phi_ref, psi_ref)")
 
         # Intermediate case: 2 control inputs [u_base, u_diff] in [-3.0, 3.0]^2
         self.action_space = spaces.Box(low=-3.0, high=3.0, shape=(2,), dtype=np.float32)
 
         # Observation: 12 physical/tracking states:
         # [z - z_ref, vz, az,
-        #  theta, phi, psi - psi_ref,
+        #  theta - theta_ref, phi - phi_ref, psi - psi_ref,
         #  wx, wx_dot,
         #  wy, wy_dot,
         #  wz, wz_dot]
@@ -315,13 +331,13 @@ class DroneEnv(gym.Env):
 
     def _obs(self):
         """Returns the 12-element observation vector with tracking errors."""
-        z_ref, psi_ref = self.mission(self.t)
+        z_ref, theta_ref, phi_ref, psi_ref = mission_reference(self.mission(self.t))
         obs = np.array([
             self.state[0] - z_ref,
             self.state[1],
             self.state[2],
-            self.state[9],
-            self.state[10],
+            self.state[9] - theta_ref,
+            self.state[10] - phi_ref,
             self.state[11] - psi_ref,
             self.state[12],
             self.state[13],
@@ -337,14 +353,17 @@ class DroneEnv(gym.Env):
         z = self.state[0]
         psi = self.state[11]
         vz = self.state[1]
-        z_ref, _ = self.mission(self.t)
+        z_ref, theta_ref, phi_ref, _ = mission_reference(self.mission(self.t))
 
         self.has_turned = self.has_turned or bool(psi >= 2.0 * np.pi)
         psi_status = self.out.has_turned if self.has_turned else self.out.no_turn
         if z <= Z_LAND:
             soft = abs(vz) <= SAFE_VZ
+            level = (abs(self.state[9] - theta_ref) <= SAFE_TILT
+                     and abs(self.state[10] - phi_ref) <= SAFE_TILT)
+            settled = np.linalg.norm(self.state[[12, 14, 16]]) <= SAFE_ANGULAR_SPEED
             landing_phase = (z_ref == Z_LAND)
-            z_status = self.out.landed if soft and landing_phase else self.out.crashed
+            z_status = self.out.landed if soft and level and settled and landing_phase else self.out.crashed
         elif z > Z_MAX:
             z_status = self.out.lost
         elif self.steps >= self.max_steps:
@@ -357,7 +376,7 @@ class DroneEnv(gym.Env):
         """Resets the environment to initial state; new_mission replaces the active mission."""
         if new_mission is not None:
             if not callable(new_mission):
-                raise TypeError("mission must be callable: mission(t) -> (z_ref, psi_ref)")
+                raise TypeError("mission must be callable: mission(t) -> (z_ref, theta_ref, phi_ref, psi_ref)")
             self.mission = new_mission
         super().reset(seed=seed, options=options)
 
@@ -373,7 +392,7 @@ class DroneEnv(gym.Env):
         self.az_prev = self.state[2]
         self.has_turned = False
 
-        z_ref, psi_ref = self.mission(self.t)
+        z_ref, theta_ref, phi_ref, psi_ref = mission_reference(self.mission(self.t))
         info = {
             "outcome": self.outcome(),
             "m": {
@@ -382,6 +401,10 @@ class DroneEnv(gym.Env):
                 "vz": float(self.state[1]),
                 "az_prev": float(self.az_prev),
                 "z_ref": float(z_ref),
+                "theta": float(self.state[9]),
+                "theta_ref": float(theta_ref),
+                "phi": float(self.state[10]),
+                "phi_ref": float(phi_ref),
                 "psi_ref": float(psi_ref),
                 "u_prev": float(self.u_prev[0]),
                 "psi": float(self.state[11]),
@@ -411,7 +434,8 @@ class DroneEnv(gym.Env):
         status = self.outcome()
 
         target_ref = self.mission(self.t)
-        reward = compute_reward(old, self.state, u, status, target_ref=target_ref, u_prev=self.u_prev)
+        reward = compute_reward(old, self.state, u, status, target_ref=target_ref, u_prev=self.u_prev, dt=self.p.dt)
+        z_ref, theta_ref, phi_ref, psi_ref = mission_reference(target_ref)
 
         terminated = (status[0] != self.out.flying)
         truncated = False  # The mission deadline is a terminal failure, not a rollout cutoff.
@@ -423,8 +447,12 @@ class DroneEnv(gym.Env):
                 "z": float(self.state[0]),
                 "vz": float(self.state[1]),
                 "az_prev": float(self.az_prev),
-                "z_ref": float(target_ref[0]),
-                "psi_ref": float(target_ref[1]),
+                "z_ref": float(z_ref),
+                "theta": float(self.state[9]),
+                "theta_ref": float(theta_ref),
+                "phi": float(self.state[10]),
+                "phi_ref": float(phi_ref),
+                "psi_ref": float(psi_ref),
                 "u_prev": float(self.u_prev[0]),
                 "psi": float(self.state[11]),
             }
