@@ -7,7 +7,7 @@ if isempty(P)
     P = load(fullfile(fileparts(mfilename('fullpath')), 'policy.mat'));
     P.acts = strsplit(P.activations, ',');
 end
-z_ref = mission(t);
+z_ref = mission(t, P);
 m = struct('t', t, 'z', z, 'vz', vz, 'az_prev', az_prev, 'z_ref', z_ref, 'u_prev', u_prev);
 obs = double(observation(m));
 x = obs(:);
@@ -33,12 +33,17 @@ function obs = observation(m)
 obs = [m.z - m.z_ref; m.vz; m.az_prev];
 end
 
-function z_ref = mission(t)
-% Same 10-second mission as Python: hold, climb, then land at -0.3 m.
+function z_ref = mission(t, P)
+% Use the selected Python mission when its samples accompany the policy.
+if isfield(P, 'mission_t') && isfield(P, 'mission_z_ref')
+    z_ref = interp1(P.mission_t(:), P.mission_z_ref(:), t, 'previous', 'extrap');
+    return
+end
+% Default Python mission for policies exported without reference samples.
 if t < 2.0
     z_ref = 0.0;
 elseif t < 6.0
-    z_ref = 0.5;
+    z_ref = 6.0;
 else
     z_ref = -0.3;
 end

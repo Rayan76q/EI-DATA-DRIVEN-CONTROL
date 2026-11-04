@@ -6,14 +6,16 @@ The drone is a rigid body in a 3D space. State (3 numbers):
     vz      velocity along vertical axis (m/s)
     az      acceleration along vertical axis (m/s²)
 
-The policy observes [z - mission(t), vz, az].
+The policy observes [z - env.mission(t), vz, az].
+The environment generates the current reference; the policy receives no mission
+function, schedule, future targets, or time-to-switch.
 
 We control all four rotors with the same intensity named u, the movement remains along the vertical axis (Oz).
 The platform to land on is at (x,y,z) = (0, 0, -0.3) (not on the car to begin with)
 
 
     from lib.drone   import DroneEnv
-    env = DroneEnv()     
+    env = DroneEnv(mission=lambda t: 2.0 if t < 6.0 else -0.3)
 
 """
 
@@ -46,14 +48,18 @@ SAFE_VZ = 0.5          # Maximum vertical touchdown speed for soft landing (m/s)
 MAX_STEPS = 200        # Mission length: 10 s at Ts = 0.05 s
 
 
-def mission(t):
-    """Target reference altitude z_ref at time t (seconds)."""
+def default_mission(t):
+    """Hold at 0 m until 2 s, target 6 m until 6 s, then land."""
     if t < 2.0:
         return 0.0       # Step 1: On the platform (z = 0)
     elif t < 6.0:
-        return 6.0       # Step 2: Hover above to gather data (z = 0.5)
+        return 6.0       # Step 2: Hover above to gather data (z = 6)
     else:
         return Z_LAND      # Step 3: Descend and land on the platform (z = -0.3)
+
+
+# Backward-compatible import for notebooks using the original function name.
+mission = default_mission
 
 
 def dynamics(state, u, dt=0.05, rnn_model=None, hidden_state=None, p=PARAMS, integrate_z=False):
@@ -143,7 +149,7 @@ class DroneEnv(gym.Env):
     """Gymnasium environment for 1D vertical drone flight and landing."""
     metadata = {"render_modes": []}
 
-    def __init__(self, rnn_model=None, params=PARAMS, max_steps=MAX_STEPS, integrate_z=False):
+    def __init__(self, rnn_model=None, params=PARAMS, max_steps=MAX_STEPS, integrate_z=False, mission=None):
         super().__init__()
         self.p = params
         self.max_steps = max_steps
@@ -167,11 +173,14 @@ class DroneEnv(gym.Env):
         self.t = 0.0
         self.u_prev = 0.0
         self.az_prev = -self.p.g
+        self.mission = mission if mission is not None else default_mission
+        if not callable(self.mission):
+            raise TypeError("mission must be callable: mission(t) -> target altitude")
 
     def _obs(self):
-        """Return [z - z_ref, vz, az], keeping the physical state unchanged."""
+        """Use only the reference at the current time; provide no future targets."""
         obs = self.state.copy().astype(np.float32)
-        obs[0] -= mission(self.t)
+        obs[0] -= self.mission(self.t)
         return obs
 
     def outcome(self):
@@ -179,7 +188,7 @@ class DroneEnv(gym.Env):
         z, vz, _ = self.state
         if z <= Z_LAND:
             soft = abs(vz) <= SAFE_VZ
-            landing_phase = mission(self.t) == Z_LAND
+            landing_phase = self.mission(self.t) == Z_LAND
             return "landed" if soft and landing_phase else "crashed"
         if z > Z_MAX:
             return "lost"
@@ -187,12 +196,13 @@ class DroneEnv(gym.Env):
             return "timeout"
         return "flying"
 
-    def reset(self, seed=None, options=None):
-        """Resets the environment to initial state."""
-        super().reset(seed=seed)
-        r = self.np_random
-
-        
+    def reset(self, seed=None, options=None, new_mission=None):
+        """Reset state; new_mission replaces the mission until changed again."""
+        if new_mission is not None:
+            if not callable(new_mission):
+                raise TypeError("mission must be callable: mission(t) -> target altitude")
+            self.mission = new_mission
+        super().reset(seed=seed, options=options)
         z0 = 0.0
         vz0 = 0.0
         az0 = -float(self.p.g)
@@ -204,7 +214,7 @@ class DroneEnv(gym.Env):
         self.u_prev = 0.0
         self.az_prev = az0
 
-        z_ref = mission(self.t)
+        z_ref = self.mission(self.t)
         info = {
             "outcome": "flying",
             "m": {
@@ -235,10 +245,10 @@ class DroneEnv(gym.Env):
         )
 
         self.steps += 1
-        self.t += self.p.dt
+        self.t = self.steps * self.p.dt
         status = self.outcome()
 
-        z_ref = mission(self.t)
+        z_ref = self.mission(self.t)
         reward = compute_reward(old, self.state, u, status, z_ref=z_ref, u_prev=self.u_prev)
 
         terminated = (status != "flying")
@@ -266,14 +276,18 @@ class DroneEnv(gym.Env):
 
 # ── Testing and Evaluation Helpers ──────────────────────────────────────────
 
-def run_episode(env, policy, seed=None, max_steps=MAX_STEPS):
-    """Runs a single episode using a given policy callable `policy(obs) -> action`."""
+def run_episode(env, policy, seed=None, max_steps=None):
+    """Return states, actions, return, and outcome for policy(obs) -> action.
+
+    The active mission is available as env.unwrapped.mission, including when
+    env is wrapped. By default, use the environment's own episode horizon.
+    """
     obs, _ = env.reset(seed=seed)
     base = env.unwrapped
     states, actions, total_reward = [base.state.copy()], [], 0.0
     info = {"outcome": "flying"}
 
-    for _ in range(max_steps):
+    for _ in range(base.max_steps if max_steps is None else max_steps):
         a = policy(obs)
         obs, r, terminated, truncated, info = env.step(a)
         states.append(base.state.copy())
