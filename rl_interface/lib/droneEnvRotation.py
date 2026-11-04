@@ -9,11 +9,20 @@ The drone is a rigid body in 3D space with 18 state variables:
     wy, wy_dot         (angular velocity and acceleration around pitch axis)
     wz, wz_dot         (angular velocity and acceleration around yaw axis)
 
-Intermediate task:
-    - Vertical motion along z and yaw rotation around psi only.
-    - x, y, theta, phi remain zero.
-    - Action space restricted to 2 rotor commands [u1, u2] in [-3.0, 3.0].
-    - RNN currently predicts [az, psi] from [u1, u2].
+Quadrotor control (Symmetric Differential Formulation):
+    - Action space: 2 control inputs [u_base, u_diff] in [-3.0, 3.0]^2:
+        * u[0] (u_base): collective thrust applied to all 4 motors.
+        * u[1] (u_diff): differential yaw command applied symmetrically (+u_diff on diag 1, -u_diff on diag 2).
+    - 4 motor commands sent to RNN:
+        u_motors = [u_base + u_diff, u_base - u_diff, u_base + u_diff, u_base - u_diff]
+    - RNN predicts: [az, w_dot_x, w_dot_y, w_dot_z].
+
+Observation space (12 variables):
+    [z - z_ref, vz, az,
+     theta, phi, psi - psi_ref,
+     wx, wx_dot,
+     wy, wy_dot,
+     wz, wz_dot]
 """
 
 from types import SimpleNamespace
@@ -28,29 +37,12 @@ SIGMA_U = 1.7267645597457886
 MEAN_AZ = -9.68746566772461
 SIGMA_AZ = 21.440523147583008
 
-# General case placeholders (to be filled when identified from full dataset)
-MEAN_AY = None
-SIGMA_AY = None
-MEAN_AX = None
-SIGMA_AX = None
-MEAN_THETA = None
-SIGMA_THETA = None
-MEAN_PHI = None
-SIGMA_PHI = None
-MEAN_PSI = 0.0
-SIGMA_PSI = 1.0
-MEAN_WX = None
-SIGMA_WX = None
-MEAN_WY = None
-SIGMA_WY = None
-MEAN_WZ = None
-SIGMA_WZ = None
-MEAN_WX_DOT = None
-SIGMA_WX_DOT = None
-MEAN_WY_DOT = None
-SIGMA_WY_DOT = None
-MEAN_WZ_DOT = None
-SIGMA_WZ_DOT = None
+MEAN_WX_DOT = 0.0
+SIGMA_WX_DOT = 1.0
+MEAN_WY_DOT = 0.0
+SIGMA_WY_DOT = 1.0
+MEAN_WZ_DOT = 0.0
+SIGMA_WZ_DOT = 1.0
 
 # Physical parameters of the system
 PARAMS = SimpleNamespace(
@@ -60,8 +52,12 @@ PARAMS = SimpleNamespace(
     sigma_u=SIGMA_U,
     mean_az=MEAN_AZ,
     sigma_az=SIGMA_AZ,
-    mean_psi=MEAN_PSI,
-    sigma_psi=SIGMA_PSI,
+    mean_wx_dot=MEAN_WX_DOT,
+    sigma_wx_dot=SIGMA_WX_DOT,
+    mean_wy_dot=MEAN_WY_DOT,
+    sigma_wy_dot=SIGMA_WY_DOT,
+    mean_wz_dot=MEAN_WZ_DOT,
+    sigma_wz_dot=SIGMA_WZ_DOT,
 )
 
 # Landing and operational thresholds
@@ -77,18 +73,12 @@ def default_mission(t):
     """Target reference altitude z_ref and target yaw angle psi_ref at time t (seconds)."""
     if t < 2.0:
         return (0.0, 0.0)                 # Step 1: On the platform (z = 0)
-    elif t < 4.0:
-        return (0.5, 0.0)                 # Step 2: Climb to altitude (z = 0.5)
     elif t < 5.0:
-        return (0.5, float(np.pi / 2.0))  # Rotate 90 degrees
-    elif t < 6.0:
-        return (0.5, float(np.pi))        # Rotate 180 degrees
-    elif t < 7.0:
-        return (0.5, float(3.0 * np.pi / 2.0)) # Rotate 270 degrees
+        return (1.0, 0.0)                 # Step 2: Climb and hold altitude (z = 1.0)
     elif t < 8.0:
-        return (0.5, float(2.0 * np.pi))  # Complete rotation (360 degrees)
+        return (1.0, float(2.0 * np.pi * (t - 5.0) / 3.0))  # Step 3: Hold altitude and complete 360° yaw turn
     else:
-        return (Z_LAND, 0.0)              # Step 3: Descend and land on platform (z = -0.3)
+        return (Z_LAND, 0.0)              # Step 4: Descend and land on platform (z = -0.3)
 
 
 # Backward-compatible import for notebooks using the original function name.
@@ -96,131 +86,113 @@ mission = default_mission
 
 
 def dynamics(state, u, dt=0.05, rnn_model=None, hidden_state=None, p=PARAMS, integrate_z=False):
-    """Calculates next 18-variable state and next recurrent hidden state.
-
-    Intermediate case (active):
-        Inputs: u = [u1, u2] in [-3, 3].
-        RNN predicts [pred_az_norm, pred_psi_norm].
-        Integrates z, vz, az and psi, wz.
+    """Calculates next 18-variable state and next recurrent hidden state using the RNN.
 
     Args:
         state (np.ndarray): Current 18-element state vector.
-        u (np.ndarray or list): Control inputs [u1, u2].
+        u (np.ndarray or list): 2-element control input [u_base, u_diff].
         dt (float): Integration time step (s).
-        rnn_model (optional): Trained PyTorch model.
-        hidden_state (optional): Recurrent hidden state.
+        rnn_model: Trained PyTorch model predicting (az, w_dot_x, w_dot_y, w_dot_z).
+        hidden_state: Recurrent hidden state tensor.
         p (SimpleNamespace): Parameters.
         integrate_z (bool): Unused when predicting az directly.
 
     Returns:
         tuple: (next_state np.ndarray of shape (18,), next_hidden_state)
     """
+    if rnn_model is None:
+        raise ValueError("dynamics requires an rnn_model. Fallback has been disabled.")
+
     z, vz, az = state[0], state[1], state[2]
-    psi, wz = state[11], state[16]
+    theta, phi, psi = state[9], state[10], state[11]
+    wx, wx_dot = state[12], state[13]
+    wy, wy_dot = state[14], state[15]
+    wz, wz_dot = state[16], state[17]
 
     u_arr = np.asarray(u, dtype=np.float32).reshape(-1)
+    if len(u_arr) < 2:
+        u_arr = np.pad(u_arr, (0, 2 - len(u_arr)), mode='edge')
 
-    # =========================================================================
-    # GENERAL CASE (Commented out - to be enabled when full 6-DOF RNN is trained)
-    # =========================================================================
-    # # General case expects 4 inputs: u = [u1, u2, u3, u4]
-    # u_norm = (u_arr - p.mean_u) / p.sigma_u
-    # u_tensor = torch.tensor([[[float(u_norm[0]), float(u_norm[1]), float(u_norm[2]), float(u_norm[3])]]], dtype=torch.float32)
-    # with torch.no_grad():
-    #     if hasattr(rnn_model, 'rnn') and hasattr(rnn_model, 'head'):
-    #         out, next_hidden = rnn_model.rnn(u_tensor, hidden_state)
-    #         pred_tensor = rnn_model.head(out)
-    #     else:
-    #         pred_tensor, next_hidden = rnn_model(u_tensor, hidden_state)
-    #     pred = pred_tensor.detach().cpu().squeeze().numpy()
-    #
-    # # Full RNN output: [ax, ay, az, wx_dot, wy_dot, wz_dot, phi, psi]
-    # ax_phys = float(pred[0]) * p.sigma_ax + p.mean_ax
-    # ay_phys = float(pred[1]) * p.sigma_ay + p.mean_ay
-    # az_phys = float(pred[2]) * p.sigma_az + p.mean_az
-    # wx_dot_phys = float(pred[3]) * p.sigma_wx_dot + p.mean_wx_dot
-    # wy_dot_phys = float(pred[4]) * p.sigma_wy_dot + p.mean_wy_dot
-    # wz_dot_phys = float(pred[5]) * p.sigma_wz_dot + p.mean_wz_dot
-    # phi_phys = float(pred[6]) * p.sigma_phi + p.mean_phi
-    # psi_phys = float(pred[7]) * p.sigma_psi + p.mean_psi
-    #
-    # # Kinematics integration:
-    # z_next = z + (vz + az_phys * dt) * dt
-    # vz_next = vz + az_phys * dt
-    # y_next = state[3] + (state[4] + ay_phys * dt) * dt
-    # vy_next = state[4] + ay_phys * dt
-    # x_next = state[6] + (state[7] + ax_phys * dt) * dt
-    # vx_next = state[7] + ax_phys * dt
-    # theta_next = state[9]
-    # phi_next = phi_phys
-    # psi_next = psi_phys
-    # wx_next = state[12] + wx_dot_phys * dt
-    # wy_next = state[14] + wy_dot_phys * dt
-    # wz_next = state[16] + wz_dot_phys * dt
-    #
-    # next_state = np.array([
-    #     z_next, vz_next, az_phys,
-    #     y_next, vy_next, ay_phys,
-    #     x_next, vx_next, ax_phys,
-    #     theta_next, phi_next, psi_next,
-    #     wx_next, wx_dot_phys,
-    #     wy_next, wy_dot_phys,
-    #     wz_next, wz_dot_phys
-    # ], dtype=np.float32)
-    # return next_state, next_hidden
-    # =========================================================================
+    # Symmetric differential allocation to 4 motors:
+    # Diagonal 1 (motors 1 & 3): u_base + u_diff
+    # Diagonal 2 (motors 2 & 4): u_base - u_diff
+    u_base = float(u_arr[0])
+    u_diff = float(u_arr[1])
+    u_motors = np.array([
+        u_base + u_diff,
+        u_base - u_diff,
+        u_base + u_diff,
+        u_base - u_diff
+    ], dtype=np.float32)
 
-    # ── Intermediate Case (Active) ───────────────────────────────────────────
-    if rnn_model is not None:
-        # Normalize u before feeding into the RNN
-        u_norm = (u_arr - p.mean_u) / p.sigma_u
-        u_tensor = torch.tensor([[[float(u_norm[0]), float(u_norm[1])]]], dtype=torch.float32)
-        with torch.no_grad():
-            if hasattr(rnn_model, 'rnn') and hasattr(rnn_model, 'head'):
-                out, next_hidden = rnn_model.rnn(u_tensor, hidden_state)
-                pred_tensor = rnn_model.head(out)
+    # Normalize 4 motor inputs before entering the RNN
+    u_norm = (u_motors - p.mean_u) / p.sigma_u
+    u_tensor = torch.tensor([[u_norm.tolist()]], dtype=torch.float32)
+
+    with torch.no_grad():
+        if hasattr(rnn_model, 'rnn') and hasattr(rnn_model, 'head'):
+            out, next_hidden = rnn_model.rnn(u_tensor, hidden_state)
+            pred_tensor = rnn_model.head(out)
+        else:
+            res = rnn_model(u_tensor, hidden_state)
+            if isinstance(res, tuple):
+                pred_tensor, next_hidden = res
             else:
-                res = rnn_model(u_tensor, hidden_state)
-                if isinstance(res, tuple):
-                    pred_tensor, next_hidden = res
-                else:
-                    pred_tensor = res
-                    next_hidden = hidden_state
+                pred_tensor = res
+                next_hidden = hidden_state
 
-            if hasattr(pred_tensor, 'detach'):
-                pred = pred_tensor.detach().cpu().squeeze().numpy()
-            else:
-                pred = np.asarray(pred_tensor).squeeze()
+        if hasattr(pred_tensor, 'detach'):
+            pred = pred_tensor.detach().cpu().squeeze().numpy()
+        else:
+            pred = np.asarray(pred_tensor).squeeze()
 
-        pred = np.atleast_1d(pred).astype(float)
-        pred_az_norm = float(pred[0])
-        pred_psi_norm = float(pred[1]) if len(pred) > 1 else 0.0
+    pred = np.atleast_1d(pred).astype(float)
+    # Expected RNN outputs: [az, w_dot_x, w_dot_y, w_dot_z]
+    pred_az_norm = float(pred[0])
+    pred_wx_dot_norm = float(pred[1]) if len(pred) > 1 else 0.0
+    pred_wy_dot_norm = float(pred[2]) if len(pred) > 2 else 0.0
+    pred_wz_dot_norm = float(pred[3]) if len(pred) > 3 else 0.0
 
-        # Denormalization to physical units
-        az_phys = pred_az_norm * p.sigma_az + p.mean_az
-        psi_phys = pred_psi_norm * p.sigma_psi + p.mean_psi
-    else:
-        next_hidden = hidden_state
-        # Baseline analytical model with 2 inputs:
-        # Average tension drives vertical acceleration
-        u_mean = float(0.5 * (u_arr[0] + u_arr[1]))
-        u_phys = u_mean * p.sigma_u + p.mean_u
-        az_phys = float(18.3424 * u_phys - p.g)
+    sigma_wx_dot = getattr(p, 'sigma_wx_dot', 1.0) or 1.0
+    mean_wx_dot = getattr(p, 'mean_wx_dot', 0.0) or 0.0
+    sigma_wy_dot = getattr(p, 'sigma_wy_dot', 1.0) or 1.0
+    mean_wy_dot = getattr(p, 'mean_wy_dot', 0.0) or 0.0
+    sigma_wz_dot = getattr(p, 'sigma_wz_dot', 1.0) or 1.0
+    mean_wz_dot = getattr(p, 'mean_wz_dot', 0.0) or 0.0
 
-        # Differential tension drives yaw rotation
-        u_diff = float(u_arr[0] - u_arr[1])
-        wz_next = float(u_diff * 2.0)
-        psi_phys = float(psi + wz_next * dt)
+    # Denormalization to physical units
+    az_phys = pred_az_norm * p.sigma_az + p.mean_az
+    wx_dot_phys = pred_wx_dot_norm * sigma_wx_dot + mean_wx_dot
+    wy_dot_phys = pred_wy_dot_norm * sigma_wy_dot + mean_wy_dot
+    wz_dot_phys = pred_wz_dot_norm * sigma_wz_dot + mean_wz_dot
 
-    # Kinematic integration along vertical axis
+    # 1. Linear kinematics along vertical axis
     vz_next = vz + az_phys * dt
     z_next = z + vz_next * dt
     az_next = az_phys
 
-    # Kinematic integration along yaw axis
-    psi_next = psi_phys
-    wz_next = (psi_next - psi) / dt
-    wz_dot_next = (wz_next - wz) / dt
+    # 2. Angular accelerations
+    wx_dot_next = wx_dot_phys
+    wy_dot_next = wy_dot_phys
+    wz_dot_next = wz_dot_phys
+
+    # 3. Angular rates integration
+    wx_next = wx + wx_dot_phys * dt
+    wy_next = wy + wy_dot_phys * dt
+    wz_next = wz + wz_dot_phys * dt
+
+    # 4. Attitude propagation (Euler angle kinematic rates)
+    phi_dot = wx_next + np.sin(phi) * np.tan(theta) * wy_next + np.cos(phi) * np.tan(theta) * wz_next
+    theta_dot = np.cos(phi) * wy_next - np.sin(phi) * wz_next
+    cos_theta = np.cos(theta)
+    if abs(cos_theta) > 1e-4:
+        psi_dot = (np.sin(phi) * wy_next + np.cos(phi) * wz_next) / cos_theta
+    else:
+        psi_dot = wz_next
+
+    phi_next = float(phi + phi_dot * dt)
+    theta_next = float(theta + theta_dot * dt)
+    psi_next = float(psi + psi_dot * dt)
 
     next_state = np.zeros(18, dtype=np.float32)
     next_state[0] = z_next
@@ -228,9 +200,13 @@ def dynamics(state, u, dt=0.05, rnn_model=None, hidden_state=None, p=PARAMS, int
     next_state[2] = az_next
     # y (3), vy (4), ay (5) remain 0.0
     # x (6), vx (7), ax (8) remain 0.0
-    # theta (9), phi (10) remain 0.0
+    next_state[9] = theta_next
+    next_state[10] = phi_next
     next_state[11] = psi_next
-    # wx (12), wx_dot (13), wy (14), wy_dot (15) remain 0.0
+    next_state[12] = wx_next
+    next_state[13] = wx_dot_next
+    next_state[14] = wy_next
+    next_state[15] = wy_dot_next
     next_state[16] = wz_next
     next_state[17] = wz_dot_next
 
@@ -241,9 +217,14 @@ def compute_reward(old_state, state, u, outcome, target_ref=(0.0, 0.0), u_prev=N
     """Computes the step reward based on altitude tracking, yaw orientation, and landing."""
     hubber_loss = lambda x, delta=1.0: 0.5 * x**2 if abs(x) <= delta else delta * (abs(x) - 0.5 * delta)
 
-    if outcome == "landed":
-        return 1000.0
-    if outcome in ("crashed", "lost", "timeout"):
+    if isinstance(outcome, tuple):
+        z_status, psi_status = outcome
+    else:
+        z_status, psi_status = outcome, "has_turned"
+
+    if z_status == "landed":
+        return 1000.0 if psi_status == "has_turned" else -1000.0
+    if z_status in ("crashed", "lost", "timeout"):
         return -1000.0
 
     z_ref, psi_ref = target_ref
@@ -267,7 +248,7 @@ def compute_reward(old_state, state, u, outcome, target_ref=(0.0, 0.0), u_prev=N
     # Velocity penalties
     r_vel = -1.0 * hubber_loss(vz) - 0.5 * hubber_loss(wz)
 
-    # Control effort penalty
+    # Control effort penalty (sum of squares of [u_base, u_diff])
     u_arr = np.asarray(u, dtype=np.float32)
     r_act = -1.0 * float(np.sum(u_arr ** 2))
 
@@ -285,6 +266,16 @@ class DroneEnv(gym.Env):
     """Gymnasium environment for 3D drone flight, yaw rotation, and landing."""
     metadata = {"render_modes": []}
 
+    out = SimpleNamespace(
+        flying="flying",
+        landed="landed",
+        crashed="crashed",
+        lost="lost",
+        timeout="timeout",
+        has_turned="has_turned",
+        no_turn="no_turn"
+    )
+
     def __init__(self, rnn_model=None, params=PARAMS, max_steps=MAX_STEPS, integrate_z=False, mission=None):
         super().__init__()
         self.p = params
@@ -295,27 +286,17 @@ class DroneEnv(gym.Env):
         if not callable(self.mission):
             raise TypeError("mission must be callable: mission(t) -> (z_ref, psi_ref)")
 
-        # Intermediate case (active): 2 control tensions [u1, u2] in [-3.0, 3.0]
+        # Intermediate case: 2 control inputs [u_base, u_diff] in [-3.0, 3.0]^2
         self.action_space = spaces.Box(low=-3.0, high=3.0, shape=(2,), dtype=np.float32)
 
-        # =====================================================================
-        # GENERAL CASE (Commented out - 4 control tensions for 4 rotors)
-        # =====================================================================
-        # self.action_space = spaces.Box(low=-3.0, high=3.0, shape=(4,), dtype=np.float32)
-        # =====================================================================
-
-        # Observation: 18 physical/tracking states:
+        # Observation: 12 physical/tracking states:
         # [z - z_ref, vz, az,
-        #  y - y_ref, vy, ay,
-        #  x - x_ref, vx, ax,
         #  theta, phi, psi - psi_ref,
         #  wx, wx_dot,
         #  wy, wy_dot,
         #  wz, wz_dot]
         high = np.array([
             Z_MAX, 20.0, 100.0,        # z, vz, az
-            10.0, 20.0, 100.0,         # y, vy, ay
-            10.0, 20.0, 100.0,         # x, vx, ax
             np.pi, np.pi, 2.0 * np.pi, # theta, phi, psi
             50.0, 500.0,               # wx, wx_dot
             50.0, 500.0,               # wy, wy_dot
@@ -329,29 +310,48 @@ class DroneEnv(gym.Env):
         self.t = 0.0
         self.u_prev = np.zeros(2, dtype=np.float32)
         self.az_prev = -self.p.g
+        self.has_turned = False
+        self.out = self.__class__.out
 
     def _obs(self):
-        """Returns the 18-element observation vector with tracking errors."""
-        obs = self.state.copy().astype(np.float32)
+        """Returns the 12-element observation vector with tracking errors."""
         z_ref, psi_ref = self.mission(self.t)
-        obs[0] -= z_ref
-        obs[11] -= psi_ref
+        obs = np.array([
+            self.state[0] - z_ref,
+            self.state[1],
+            self.state[2],
+            self.state[9],
+            self.state[10],
+            self.state[11] - psi_ref,
+            self.state[12],
+            self.state[13],
+            self.state[14],
+            self.state[15],
+            self.state[16],
+            self.state[17],
+        ], dtype=np.float32)
         return obs
 
     def outcome(self):
-        """Determines the flight status: 'flying', 'landed', 'crashed', 'lost', or 'timeout'."""
+        """Return (z status, yaw status), remembering a completed positive 2π turn."""
         z = self.state[0]
+        psi = self.state[11]
         vz = self.state[1]
         z_ref, _ = self.mission(self.t)
+
+        self.has_turned = self.has_turned or bool(psi >= 2.0 * np.pi)
+        psi_status = self.out.has_turned if self.has_turned else self.out.no_turn
         if z <= Z_LAND:
             soft = abs(vz) <= SAFE_VZ
             landing_phase = (z_ref == Z_LAND)
-            return "landed" if soft and landing_phase else "crashed"
-        if z > Z_MAX:
-            return "lost"
-        if self.steps >= self.max_steps:
-            return "timeout"
-        return "flying"
+            z_status = self.out.landed if soft and landing_phase else self.out.crashed
+        elif z > Z_MAX:
+            z_status = self.out.lost
+        elif self.steps >= self.max_steps:
+            z_status = self.out.timeout
+        else:
+            z_status = self.out.flying
+        return z_status, psi_status
 
     def reset(self, seed=None, options=None, new_mission=None):
         """Resets the environment to initial state; new_mission replaces the active mission."""
@@ -371,19 +371,20 @@ class DroneEnv(gym.Env):
         self.t = 0.0
         self.u_prev = np.zeros(2, dtype=np.float32)
         self.az_prev = self.state[2]
+        self.has_turned = False
 
         z_ref, psi_ref = self.mission(self.t)
         info = {
-            "outcome": "flying",
+            "outcome": self.outcome(),
             "m": {
                 "t": self.t,
                 "z": float(self.state[0]),
                 "vz": float(self.state[1]),
                 "az_prev": float(self.az_prev),
                 "z_ref": float(z_ref),
+                "psi_ref": float(psi_ref),
                 "u_prev": float(self.u_prev[0]),
                 "psi": float(self.state[11]),
-                "psi_ref": float(psi_ref),
             }
         }
         return self._obs(), info
@@ -391,8 +392,8 @@ class DroneEnv(gym.Env):
     def step(self, action):
         """Performs one environment step under control input u."""
         u = np.clip(np.asarray(action, dtype=np.float32).reshape(-1), -3.0, 3.0)
-        if len(u) == 1:
-            u = np.array([u[0], u[0]], dtype=np.float32)
+        if len(u) < 2:
+            u = np.pad(u, (0, 2 - len(u)), mode='edge')
         old = self.state
 
         self.state, self.hidden_state = dynamics(
@@ -412,7 +413,7 @@ class DroneEnv(gym.Env):
         target_ref = self.mission(self.t)
         reward = compute_reward(old, self.state, u, status, target_ref=target_ref, u_prev=self.u_prev)
 
-        terminated = (status != "flying")
+        terminated = (status[0] != self.out.flying)
         truncated = False  # The mission deadline is a terminal failure, not a rollout cutoff.
 
         info = {
@@ -423,9 +424,9 @@ class DroneEnv(gym.Env):
                 "vz": float(self.state[1]),
                 "az_prev": float(self.az_prev),
                 "z_ref": float(target_ref[0]),
+                "psi_ref": float(target_ref[1]),
                 "u_prev": float(self.u_prev[0]),
                 "psi": float(self.state[11]),
-                "psi_ref": float(target_ref[1]),
             }
         }
 
@@ -443,10 +444,9 @@ def run_episode(env, policy, seed=None, max_steps=None):
     The active mission is available as env.unwrapped.mission, including when
     env is wrapped. By default, use the environment's own episode horizon.
     """
-    obs, _ = env.reset(seed=seed)
+    obs, info = env.reset(seed=seed)
     base = env.unwrapped
     states, actions, total_reward = [base.state.copy()], [], 0.0
-    info = {"outcome": "flying"}
 
     for _ in range(base.max_steps if max_steps is None else max_steps):
         a = policy(obs)
@@ -466,7 +466,8 @@ def evaluate(env, policy, n=50, seed=0):
     for i in range(n):
         _, _, total, outcome = run_episode(env, policy, seed=seed + i)
         returns.append(total)
-        landed += (outcome == "landed")
+        is_landed = (outcome[0] == "landed" if isinstance(outcome, tuple) else outcome == "landed")
+        landed += int(is_landed)
     returns = np.array(returns)
     print(f"mean return: {returns.mean():7.1f} ± {returns.std():5.1f} | landed: {landed}/{n}")
     return returns.mean(), landed / n
