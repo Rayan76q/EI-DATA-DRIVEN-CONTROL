@@ -66,7 +66,7 @@ PARAMS = SimpleNamespace(
 
 # Landing and operational thresholds
 Z_LAND = -0.3          # Landing platform altitude along vertical axis (m)
-Z_MAX = 5.0            # Ceiling altitude limit (m)
+Z_MAX = 10.0           # Ceiling altitude limit (m)
 SAFE_VZ = 0.5          # Maximum vertical touchdown speed for soft landing (m/s)
 SAFE_VX = 0.5
 SAFE_VY = 0.5
@@ -119,7 +119,8 @@ def dynamics(state, u, dt=0.05, rnn_model=None, hidden_state=None, p=PARAMS):
     # GENERAL CASE (Commented out - to be enabled when full 6-DOF RNN is trained)
     # =========================================================================
     # # General case expects 4 inputs: u = [u1, u2, u3, u4]
-    # u_tensor = torch.tensor([[[float(u_arr[0]), float(u_arr[1]), float(u_arr[2]), float(u_arr[3])]]], dtype=torch.float32)
+    # u_norm = (u_arr - p.mean_u) / p.sigma_u
+    # u_tensor = torch.tensor([[[float(u_norm[0]), float(u_norm[1]), float(u_norm[2]), float(u_norm[3])]]], dtype=torch.float32)
     # with torch.no_grad():
     #     if hasattr(rnn_model, 'rnn') and hasattr(rnn_model, 'head'):
     #         out, next_hidden = rnn_model.rnn(u_tensor, hidden_state)
@@ -166,8 +167,9 @@ def dynamics(state, u, dt=0.05, rnn_model=None, hidden_state=None, p=PARAMS):
 
     # ── Intermediate Case (Active) ───────────────────────────────────────────
     if rnn_model is not None:
-        # RNN input: 2 controls [u1, u2]
-        u_tensor = torch.tensor([[[float(u_arr[0]), float(u_arr[1])]]], dtype=torch.float32)
+        # Normalize u before feeding into the RNN
+        u_norm = (u_arr - p.mean_u) / p.sigma_u
+        u_tensor = torch.tensor([[[float(u_norm[0]), float(u_norm[1])]]], dtype=torch.float32)
         with torch.no_grad():
             if hasattr(rnn_model, 'rnn') and hasattr(rnn_model, 'head'):
                 out, next_hidden = rnn_model.rnn(u_tensor, hidden_state)
@@ -232,10 +234,12 @@ def dynamics(state, u, dt=0.05, rnn_model=None, hidden_state=None, p=PARAMS):
 
 def compute_reward(old_state, state, u, outcome, target_ref=(0.0, 0.0), u_prev=None):
     """Computes the step reward based on altitude tracking, yaw orientation, and landing."""
+    hubber_loss = lambda x, delta=1.0: 0.5 * x**2 if abs(x) <= delta else delta * (abs(x) - 0.5 * delta)
+
     if outcome == "landed":
-        return 100.0
+        return 1000.0
     if outcome in ("crashed", "lost", "timeout"):
-        return -100.0
+        return -1000.0
 
     z_ref, psi_ref = target_ref
     z = state[0]
@@ -246,42 +250,42 @@ def compute_reward(old_state, state, u, outcome, target_ref=(0.0, 0.0), u_prev=N
     wz = state[16]
 
     # Altitude tracking penalty
-    r_z = -2.0 * abs(z - z_ref)
+    r_z = -10.0 * hubber_loss(z - z_ref)
 
     # Yaw angle tracking penalty (normalized to [-pi, pi])
     psi_err = (psi - psi_ref + np.pi) % (2.0 * np.pi) - np.pi
-    r_psi = -2.0 * abs(psi_err)
+    r_psi = -10.0 * hubber_loss(psi_err)
 
     # Off-axis angular deviation penalties
     r_angles = -2.0 * (abs(theta) + abs(phi))
 
     # Velocity penalties
-    r_vel = -0.1 * (vz ** 2) - 0.05 * (wz ** 2)
+    r_vel = -1.0 * hubber_loss(vz) - 0.5 * hubber_loss(wz)
 
     # Control effort penalty
     u_arr = np.asarray(u, dtype=np.float32)
-    r_act = -0.01 * float(np.sum(u_arr ** 2))
+    r_act = -1.0 * float(np.sum(u_arr ** 2))
 
     # Smoothness penalty
     if u_prev is not None:
         u_prev_arr = np.asarray(u_prev, dtype=np.float32)
-        r_smooth = -0.05 * float(np.sum(np.abs(u_arr - u_prev_arr)))
+        r_smooth = -1.0 * float(np.sum(np.abs(u_arr - u_prev_arr)))
     else:
         r_smooth = 0.0
 
-    r_step = -0.05
-    return float(r_z + r_psi + r_angles + r_vel + r_act + r_smooth + r_step)
+    return float(r_z + r_psi + r_angles + r_vel + r_act + r_smooth)
 
 
 class DroneEnv(gym.Env):
     """Gymnasium environment for 3D drone flight, yaw rotation, and landing."""
     metadata = {"render_modes": []}
 
-    def __init__(self, rnn_model=None, params=PARAMS, max_steps=MAX_STEPS):
+    def __init__(self, rnn_model=None, params=PARAMS, max_steps=MAX_STEPS, mission=mission):
         super().__init__()
         self.p = params
         self.max_steps = max_steps
         self.rnn_model = rnn_model
+        self.mission = mission
 
         # Intermediate case (active): 2 control tensions [u1, u2] in [-3.0, 3.0]
         self.action_space = spaces.Box(low=-3.0, high=3.0, shape=(2,), dtype=np.float32)
@@ -321,7 +325,7 @@ class DroneEnv(gym.Env):
     def _obs(self):
         """Returns the 18-element observation vector with tracking errors."""
         obs = self.state.copy().astype(np.float32)
-        z_ref, psi_ref = mission(self.t)
+        z_ref, psi_ref = self.mission(self.t)
         obs[0] -= z_ref
         obs[11] -= psi_ref
         return obs
@@ -330,9 +334,10 @@ class DroneEnv(gym.Env):
         """Determines the flight status: 'flying', 'landed', 'crashed', 'lost', or 'timeout'."""
         z = self.state[0]
         vz = self.state[1]
+        z_ref, _ = self.mission(self.t)
         if z <= Z_LAND:
             soft = abs(vz) <= SAFE_VZ
-            landing_phase = (self.t >= 8.0)
+            landing_phase = (z_ref == Z_LAND)
             return "landed" if soft and landing_phase else "crashed"
         if z > Z_MAX:
             return "lost"
@@ -355,7 +360,7 @@ class DroneEnv(gym.Env):
         self.u_prev = np.zeros(2, dtype=np.float32)
         self.az_prev = self.state[2]
 
-        z_ref, psi_ref = mission(self.t)
+        z_ref, psi_ref = self.mission(self.t)
         info = {
             "outcome": "flying",
             "m": {
@@ -391,7 +396,7 @@ class DroneEnv(gym.Env):
         self.t += self.p.dt
         status = self.outcome()
 
-        target_ref = mission(self.t)
+        target_ref = self.mission(self.t)
         reward = compute_reward(old, self.state, u, status, target_ref=target_ref, u_prev=self.u_prev)
 
         terminated = (status != "flying")
