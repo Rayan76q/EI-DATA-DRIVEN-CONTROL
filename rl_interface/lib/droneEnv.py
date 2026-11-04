@@ -41,7 +41,7 @@ PARAMS = SimpleNamespace(
 
 # Landing and operational thresholds
 Z_LAND = -0.3          # Landing platform altitude along vertical axis (m)
-Z_MAX = 5.0            # Ceiling altitude limit (m)
+Z_MAX = 10.0            # Ceiling altitude limit (m)
 SAFE_VZ = 0.5          # Maximum vertical touchdown speed for soft landing (m/s)
 MAX_STEPS = 200        # Mission length: 10 s at Ts = 0.05 s
 
@@ -51,7 +51,7 @@ def mission(t):
     if t < 2.0:
         return 0.0       # Step 1: On the platform (z = 0)
     elif t < 6.0:
-        return 0.5       # Step 2: Hover above to gather data (z = 0.5)
+        return 6.0       # Step 2: Hover above to gather data (z = 0.5)
     else:
         return Z_LAND      # Step 3: Descend and land on the platform (z = -0.3)
 
@@ -78,7 +78,7 @@ def dynamics(state, u, dt=0.05, rnn_model=None, hidden_state=None, p=PARAMS, int
     z, vz, az = state
 
     if rnn_model is not None:
-        u_tensor = torch.tensor([[[float(u)]]], dtype=torch.float32)
+        u_tensor = torch.tensor([[(float(u) - p.mean_u)/p.sigma_u ]], dtype=torch.float32)
         with torch.no_grad():
             if hasattr(rnn_model, 'rnn') and hasattr(rnn_model, 'head'):
                 out, next_hidden = rnn_model.rnn(u_tensor, hidden_state)
@@ -104,7 +104,7 @@ def dynamics(state, u, dt=0.05, rnn_model=None, hidden_state=None, p=PARAMS, int
     else:
         next_hidden = hidden_state
         # Baseline sans RNN : u étant standardisé dans [-3, 3], on dénormalise u
-        u_phys = float(u * p.sigma_u + p.mean_u)
+        u_phys = float(u)
         az_phys = float(18.3424 * u_phys - p.g)
 
     # Intégration cinématique physique
@@ -118,18 +118,21 @@ def dynamics(state, u, dt=0.05, rnn_model=None, hidden_state=None, p=PARAMS, int
 
 def compute_reward(old_state, state, u, outcome, z_ref=0.0, u_prev=0.0):
     """Computes the step reward based on mission progress and soft landing."""
+
+    hubber_loss = lambda x, delta=1.0: 0.5 * x**2 if abs(x) <= delta else delta * (abs(x) - 0.5 * delta)
+
     if outcome == "landed":
-        return 100.0
+        return 1000.0
     if outcome in ("crashed", "lost", "timeout"):
-        return -100.0
+        return -1000.0
 
     z, vz, _ = state
     # Tracking error penalty
-    r_track = -2.0 * abs(z - z_ref)
+    r_track = -10.0 * hubber_loss(z - z_ref)
     # Velocity penalty
-    r_vel = -0.1 * (vz ** 2)
+    r_vel = -1.0 * hubber_loss(vz)
     # Control effort penalty
-    r_act = -1.0 * abs(u)
+    r_act = -1.0 * u**2
     # Reward staying airborne and discourage abrupt command changes.
     r_smooth = -1.0 * abs(u - u_prev)
 
