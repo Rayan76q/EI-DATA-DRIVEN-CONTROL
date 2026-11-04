@@ -73,7 +73,7 @@ SAFE_VY = 0.5
 MAX_STEPS = 200        # Mission length: 10 s at Ts = 0.05 s
 
 
-def mission(t):
+def default_mission(t):
     """Target reference altitude z_ref and target yaw angle psi_ref at time t (seconds)."""
     if t < 2.0:
         return (0.0, 0.0)                 # Step 1: On the platform (z = 0)
@@ -91,7 +91,11 @@ def mission(t):
         return (Z_LAND, 0.0)              # Step 3: Descend and land on platform (z = -0.3)
 
 
-def dynamics(state, u, dt=0.05, rnn_model=None, hidden_state=None, p=PARAMS):
+# Backward-compatible import for notebooks using the original function name.
+mission = default_mission
+
+
+def dynamics(state, u, dt=0.05, rnn_model=None, hidden_state=None, p=PARAMS, integrate_z=False):
     """Calculates next 18-variable state and next recurrent hidden state.
 
     Intermediate case (active):
@@ -106,6 +110,7 @@ def dynamics(state, u, dt=0.05, rnn_model=None, hidden_state=None, p=PARAMS):
         rnn_model (optional): Trained PyTorch model.
         hidden_state (optional): Recurrent hidden state.
         p (SimpleNamespace): Parameters.
+        integrate_z (bool): Unused when predicting az directly.
 
     Returns:
         tuple: (next_state np.ndarray of shape (18,), next_hidden_state)
@@ -280,12 +285,15 @@ class DroneEnv(gym.Env):
     """Gymnasium environment for 3D drone flight, yaw rotation, and landing."""
     metadata = {"render_modes": []}
 
-    def __init__(self, rnn_model=None, params=PARAMS, max_steps=MAX_STEPS, mission=mission):
+    def __init__(self, rnn_model=None, params=PARAMS, max_steps=MAX_STEPS, integrate_z=False, mission=None):
         super().__init__()
         self.p = params
         self.max_steps = max_steps
         self.rnn_model = rnn_model
-        self.mission = mission
+        self.integrate_z = integrate_z
+        self.mission = mission if mission is not None else default_mission
+        if not callable(self.mission):
+            raise TypeError("mission must be callable: mission(t) -> (z_ref, psi_ref)")
 
         # Intermediate case (active): 2 control tensions [u1, u2] in [-3.0, 3.0]
         self.action_space = spaces.Box(low=-3.0, high=3.0, shape=(2,), dtype=np.float32)
@@ -345,9 +353,13 @@ class DroneEnv(gym.Env):
             return "timeout"
         return "flying"
 
-    def reset(self, seed=None, options=None):
-        """Resets the environment to initial state."""
-        super().reset(seed=seed)
+    def reset(self, seed=None, options=None, new_mission=None):
+        """Resets the environment to initial state; new_mission replaces the active mission."""
+        if new_mission is not None:
+            if not callable(new_mission):
+                raise TypeError("mission must be callable: mission(t) -> (z_ref, psi_ref)")
+            self.mission = new_mission
+        super().reset(seed=seed, options=options)
 
         self.state = np.zeros(18, dtype=np.float32)
         self.state[0] = 0.0              # z
@@ -389,18 +401,19 @@ class DroneEnv(gym.Env):
             dt=self.p.dt,
             rnn_model=self.rnn_model,
             hidden_state=self.hidden_state,
-            p=self.p
+            p=self.p,
+            integrate_z=self.integrate_z
         )
 
         self.steps += 1
-        self.t += self.p.dt
+        self.t = self.steps * self.p.dt
         status = self.outcome()
 
         target_ref = self.mission(self.t)
         reward = compute_reward(old, self.state, u, status, target_ref=target_ref, u_prev=self.u_prev)
 
         terminated = (status != "flying")
-        truncated = (self.steps >= self.max_steps and not terminated)
+        truncated = False  # The mission deadline is a terminal failure, not a rollout cutoff.
 
         info = {
             "outcome": status,
@@ -424,14 +437,18 @@ class DroneEnv(gym.Env):
 
 # ── Testing and Evaluation Helpers ──────────────────────────────────────────
 
-def run_episode(env, policy, seed=None, max_steps=MAX_STEPS):
-    """Runs a single episode using a given policy callable `policy(obs) -> action`."""
+def run_episode(env, policy, seed=None, max_steps=None):
+    """Return states, actions, return, and outcome for policy(obs) -> action.
+
+    The active mission is available as env.unwrapped.mission, including when
+    env is wrapped. By default, use the environment's own episode horizon.
+    """
     obs, _ = env.reset(seed=seed)
     base = env.unwrapped
     states, actions, total_reward = [base.state.copy()], [], 0.0
     info = {"outcome": "flying"}
 
-    for _ in range(max_steps):
+    for _ in range(base.max_steps if max_steps is None else max_steps):
         a = policy(obs)
         obs, r, terminated, truncated, info = env.step(a)
         states.append(base.state.copy())
