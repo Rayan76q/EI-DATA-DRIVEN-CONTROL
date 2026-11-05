@@ -159,7 +159,7 @@ def main():
             print(f"MATLAB: {matlab_command}")
         else:
             matlab_log = output_dir / "matlab.log"
-            print("Running the Simulink plant; scope exports will be saved under closed_loop/results.", flush=True)
+            print("Running the Simulink plant; scope exports will be saved under results/closed_loop.", flush=True)
             with matlab_log.open("w") as log:
                 result = subprocess.run(
                     [matlab, "-batch", matlab_command], cwd=PROJECT_ROOT,

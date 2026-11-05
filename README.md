@@ -35,9 +35,10 @@ src/
   drone/
     plant/              Standalone Simulink drone and protected dynamics
     closed_loop/        Simulink controllers and policy evaluation
-      results/          Simulink trajectories and scope exports, ignored by Git
     visualization/      Optional Meshcat viewer
 results/                Run outputs, ignored by Git
+  altitude/             Python policy evaluations and training runs
+  closed_loop/          Simulink trajectories and scope exports
 ```
 
 `data/` and `.data/` inside extracted checkpoints are PyTorch tensor storage
@@ -66,7 +67,7 @@ flowchart LR
     Export --> MAT["policy.mat and traj_model.mat"]
     MAT --> MATLAB["src/drone/closed_loop: EINT_RL_eval"]
     Plant --> MATLAB
-    MATLAB --> Scopes["closed_loop/results: physical state traces and figures"]
+    MATLAB --> Scopes["results/closed_loop: physical state traces and figures"]
 ```
 
 `main_model.py` runs dynamics inference. `policy/training.py` trains the chosen
@@ -240,13 +241,17 @@ are mutually exclusive. Supplied weights are preserved.
 
 Training also saves `learning_curve.png` and TensorBoard events under
 `training/tensorboard/<ALGO>_1/` (the suffix increments when reusing a directory).
-To compare training runs in TensorBoard:
+`training.py` writes TensorBoard logs automatically, but does not start the
+dashboard or open a browser. In a second terminal, with the same Python
+environment activated and the repository as the current directory, run:
 
 ```sh
-tensorboard --logdir results --port 6006
+python -m tensorboard.main --logdir results --port 6006
 ```
 
-Open `http://localhost:6006` for episode rewards, losses and evaluation metrics.
+Open [http://localhost:6006](http://localhost:6006/#scalars) in your browser for
+episode rewards, losses and evaluation metrics. You can start TensorBoard
+before training and leave it running; new logs appear as training progresses.
 Evaluation metrics appear after 20,480 training steps.
 Both mains accept absolute invocation paths; explicit relative arguments use
 the current working directory.
@@ -269,7 +274,7 @@ out = EINT_RL_eval(fullfile(pwd, 'results', 'altitude', 'demo'), 0.0);
 
 This replays the exported policy against Python measurements, then runs
 `EINT_RL_closed_loop.slx` with the standalone plant. Results go under
-`src/drone/closed_loop/results/<algorithm>/<run>/`:
+`results/closed_loop/<algorithm>/<run>/`:
 
 - `traj_simulink.mat`: simulation output and plant signals.
 - `trajectory.csv`: all 18 physical states, command and reference.

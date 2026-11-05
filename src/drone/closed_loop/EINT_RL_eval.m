@@ -3,7 +3,7 @@ function out = EINT_RL_eval(export_dir, noise_gain, results_dir)
 %   addpath('src/drone/closed_loop');
 %   out = EINT_RL_eval('results/altitude/ppo/my_run', 0.0);
 % The export folder must contain policy.mat and traj_model.mat from Python.
-% Plant logs and scope plots go to closed_loop/results/<algorithm>/<run>/.
+% Plant logs and scope plots go to results/closed_loop/<algorithm>/<run>/.
 % Pass a third argument to choose a different plant-results folder.
 if nargin < 1 || isempty(export_dir)
     error('Pass the export folder containing policy.mat and traj_model.mat.');
@@ -18,6 +18,7 @@ if ~exists || ~export_info.directory
 end
 export_dir = export_info.Name;
 here = fileparts(mfilename('fullpath'));
+project_root = fileparts(fileparts(fileparts(here)));
 plant_dir = fullfile(here, '..', 'plant');
 addpath(here, plant_dir);
 
@@ -49,7 +50,7 @@ if nargin < 3 || isempty(results_dir)
     if any(strcmp(run_name, {'training', 'matlab'}))
         [~, run_name] = fileparts(parent_dir);
     end
-    results_dir = fullfile(here, 'results', algorithm, run_name);
+    results_dir = fullfile(project_root, 'results', 'closed_loop', algorithm, run_name);
 end
 
 random_init;                          % initialize the plant's 18 noise seeds
