@@ -1,0 +1,27 @@
+{
+  "outcome": "crashed",
+  "landed": false,
+  "return": -1013.789076037705,
+  "steps": 11,
+  "duration_s": 0.55,
+  "peak_altitude_m": 0.0,
+  "final_altitude_m": -0.31084510684013367,
+  "final_vertical_velocity_m_s": -0.747711718082428,
+  "altitude_mae_m": 0.14871185543862256,
+  "rms_delta_u": 0.7704780008311319,
+  "algorithm": "DQN",
+  "rnn_path": "/home/rayan768/CS/drone/EI-DATA-DRIVEN-CONTROL/src/model/checkpoints/rnn_z.pt",
+  "policy_path": "/home/rayan768/CS/drone/EI-DATA-DRIVEN-CONTROL/results/altitude/dqn/20261105_202000_ztol02/training/best_model.zip",
+  "seed": 0,
+  "Ts": 0.05,
+  "policy_training_steps": 245760,
+  "trained_this_run": true,
+  "training_config_path": "/home/rayan768/CS/drone/EI-DATA-DRIVEN-CONTROL/src/policy/config/dqn.json",
+  "mission": {
+    "initial_altitude_m": 0.0,
+    "hover_altitude_m": 2.0,
+    "climb_start_s": 2.0,
+    "landing_start_s": 6.0,
+    "landing_altitude_m": -0.3
+  }
+}

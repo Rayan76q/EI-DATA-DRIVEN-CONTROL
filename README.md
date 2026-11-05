@@ -183,6 +183,11 @@ same contract or their own training statistics.
 contain only current altitude error, velocity and acceleration. The policy
 has no access to the mission schedule.
 
+The altitude tracking reward accepts a ±0.2 m band when `z_ref > 0`.
+Inside that band the altitude penalty is zero; outside it, the penalty uses
+the distance beyond the band. Zero and negative references keep the full
+tracking error. Velocity, command, smoothness and terminal rewards are unchanged.
+
 Runs save `flight.png`, `trajectory.csv`, `trajectory.npz`, `metrics.json`,
 `policy.mat` and `traj_model.mat`. Use `--show` to display plots. Without an
 output directory, each run gets a directory under

@@ -1,0 +1,88 @@
+{
+  "ppo": {
+    "requested_steps": 500000,
+    "actual_steps": 501760,
+    "optimizer_updates": 1960,
+    "selected_checkpoint": "/home/rayan768/CS/drone/EI-DATA-DRIVEN-CONTROL/results/altitude/ppo/20261105_202000_ztol02/training/best_model.zip",
+    "outcome_on_rnn": "landed",
+    "duration_s": 8.200000000000001,
+    "return": 536.6442310512066,
+    "tensorboard_tags": [
+      "rollout/ep_len_mean",
+      "rollout/ep_rew_mean",
+      "time/fps",
+      "train/approx_kl",
+      "train/clip_fraction",
+      "train/clip_range",
+      "train/entropy_loss",
+      "train/explained_variance",
+      "train/learning_rate",
+      "train/loss",
+      "train/policy_gradient_loss",
+      "train/std",
+      "train/value_loss",
+      "eval/mean_ep_length",
+      "eval/mean_reward"
+    ],
+    "latest_loss_step": {
+      "train/loss": 501760
+    },
+    "evaluation_points": 24,
+    "results_directory": "/home/rayan768/CS/drone/EI-DATA-DRIVEN-CONTROL/results/altitude/ppo/20261105_202000_ztol02",
+    "matlab_policy": "/home/rayan768/CS/drone/EI-DATA-DRIVEN-CONTROL/results/altitude/ppo/20261105_202000_ztol02/training/policy.mat"
+  },
+  "dqn": {
+    "requested_steps": 500000,
+    "actual_steps": 500000,
+    "optimizer_updates": 124500,
+    "selected_checkpoint": "/home/rayan768/CS/drone/EI-DATA-DRIVEN-CONTROL/results/altitude/dqn/20261105_202000_ztol02/training/best_model.zip",
+    "outcome_on_rnn": "crashed",
+    "duration_s": 0.55,
+    "return": -1013.789076037705,
+    "tensorboard_tags": [
+      "rollout/ep_len_mean",
+      "rollout/ep_rew_mean",
+      "rollout/exploration_rate",
+      "time/fps",
+      "train/learning_rate",
+      "train/loss",
+      "eval/mean_ep_length",
+      "eval/mean_reward"
+    ],
+    "latest_loss_step": {
+      "train/loss": 500000
+    },
+    "evaluation_points": 24,
+    "results_directory": "/home/rayan768/CS/drone/EI-DATA-DRIVEN-CONTROL/results/altitude/dqn/20261105_202000_ztol02",
+    "matlab_policy": "/home/rayan768/CS/drone/EI-DATA-DRIVEN-CONTROL/results/altitude/dqn/20261105_202000_ztol02/training/policy.mat"
+  },
+  "sac": {
+    "requested_steps": 500000,
+    "actual_steps": 500000,
+    "optimizer_updates": 124500,
+    "selected_checkpoint": "/home/rayan768/CS/drone/EI-DATA-DRIVEN-CONTROL/results/altitude/sac/20261105_202000_ztol02/training/best_model.zip",
+    "outcome_on_rnn": "landed",
+    "duration_s": 7.45,
+    "return": -215.92837512493134,
+    "tensorboard_tags": [
+      "rollout/ep_len_mean",
+      "rollout/ep_rew_mean",
+      "time/fps",
+      "train/std",
+      "train/actor_loss",
+      "train/critic_loss",
+      "train/ent_coef",
+      "train/ent_coef_loss",
+      "train/learning_rate",
+      "eval/mean_ep_length",
+      "eval/mean_reward"
+    ],
+    "latest_loss_step": {
+      "train/actor_loss": 500000,
+      "train/critic_loss": 500000
+    },
+    "evaluation_points": 24,
+    "results_directory": "/home/rayan768/CS/drone/EI-DATA-DRIVEN-CONTROL/results/altitude/sac/20261105_202000_ztol02",
+    "matlab_policy": "/home/rayan768/CS/drone/EI-DATA-DRIVEN-CONTROL/results/altitude/sac/20261105_202000_ztol02/training/policy.mat"
+  }
+}

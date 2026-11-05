@@ -1,0 +1,96 @@
+{
+  "source": "RNN dynamics; no Simulink execution",
+  "reward": {
+    "positive_reference_deadband_m": 0.2,
+    "active_when": "z_ref > 0",
+    "tracking_error_outside_band": "max(abs(z - z_ref) - 0.2, 0)",
+    "zero_and_negative_references": "original full tracking error",
+    "source_sha256": "dbd6ac5d2970e5c79155f4fdd7ebc85e143751c7d4bb322390c0bd1647eb5ac7"
+  },
+  "algorithms": {
+    "ppo": {
+      "before": {
+        "outcome": "landed",
+        "duration_s": 8.6,
+        "peak_altitude_m": 1.9856457710266113,
+        "results": "/home/rayan768/CS/drone/EI-DATA-DRIVEN-CONTROL/results/altitude/ppo/20261105_193731_full",
+        "hover_window_s": [
+          4,
+          6
+        ],
+        "hover_mean_z_m": 1.9759410619735718,
+        "hover_z_std_m": 0.011495300568640232,
+        "hover_vz_rms_m_s": 0.036352578550577164,
+        "hover_delta_u_rms": 0.014114542864263058,
+        "hover_tracking_mae_m": 0.024059003219008446,
+        "hover_fraction_within_02_m": 1.0
+      },
+      "after": {
+        "outcome": "landed",
+        "duration_s": 8.200000000000001,
+        "peak_altitude_m": 1.9702699184417725,
+        "results": "/home/rayan768/CS/drone/EI-DATA-DRIVEN-CONTROL/results/altitude/ppo/20261105_202000_ztol02",
+        "hover_window_s": [
+          4,
+          6
+        ],
+        "hover_mean_z_m": 1.9606682062149048,
+        "hover_z_std_m": 0.010994859039783478,
+        "hover_vz_rms_m_s": 0.041568171232938766,
+        "hover_delta_u_rms": 0.06605102866888046,
+        "hover_tracking_mae_m": 0.03933175653219223,
+        "hover_fraction_within_02_m": 1.0
+      }
+    },
+    "dqn": {
+      "before": {
+        "outcome": "crashed",
+        "duration_s": 0.9500000000000001,
+        "peak_altitude_m": 0.0,
+        "results": "/home/rayan768/CS/drone/EI-DATA-DRIVEN-CONTROL/results/altitude/dqn/20261105_193731_full",
+        "hover_metrics": "Insufficient flight data for the complete 4\u20136 s hover window"
+      },
+      "after": {
+        "outcome": "crashed",
+        "duration_s": 0.55,
+        "peak_altitude_m": 0.0,
+        "results": "/home/rayan768/CS/drone/EI-DATA-DRIVEN-CONTROL/results/altitude/dqn/20261105_202000_ztol02",
+        "hover_metrics": "Insufficient flight data for the complete 4\u20136 s hover window"
+      }
+    },
+    "sac": {
+      "before": {
+        "outcome": "landed",
+        "duration_s": 7.050000000000001,
+        "peak_altitude_m": 2.1423048973083496,
+        "results": "/home/rayan768/CS/drone/EI-DATA-DRIVEN-CONTROL/results/altitude/sac/20261105_193731_full",
+        "hover_window_s": [
+          4,
+          6
+        ],
+        "hover_mean_z_m": 2.1157071590423584,
+        "hover_z_std_m": 0.016781862825155258,
+        "hover_vz_rms_m_s": 0.2987961769104004,
+        "hover_delta_u_rms": 1.4190524816513062,
+        "hover_tracking_mae_m": 0.11570720374584198,
+        "hover_fraction_within_02_m": 1.0
+      },
+      "after": {
+        "outcome": "landed",
+        "duration_s": 7.45,
+        "peak_altitude_m": 2.089836597442627,
+        "results": "/home/rayan768/CS/drone/EI-DATA-DRIVEN-CONTROL/results/altitude/sac/20261105_202000_ztol02",
+        "hover_window_s": [
+          4,
+          6
+        ],
+        "hover_mean_z_m": 2.011223077774048,
+        "hover_z_std_m": 0.020897720009088516,
+        "hover_vz_rms_m_s": 0.33423343300819397,
+        "hover_delta_u_rms": 2.2144808769226074,
+        "hover_tracking_mae_m": 0.01905367150902748,
+        "hover_fraction_within_02_m": 1.0
+      }
+    }
+  }
+}

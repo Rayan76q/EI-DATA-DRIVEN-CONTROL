@@ -44,6 +44,7 @@ PARAMS = SimpleNamespace(
 # Landing and operational thresholds
 Z_LAND = -0.3          # Landing platform altitude along vertical axis (m)
 Z_MAX = 10.0            # Ceiling altitude limit (m)
+Z_TRACK_TOLERANCE = 0.2 # Tracking deadband for strictly positive references (m)
 SAFE_VZ = 0.5          # Maximum vertical touchdown speed for soft landing (m/s)
 MAX_STEPS = 200        # Mission length: 10 s at Ts = 0.05 s
 
@@ -123,7 +124,7 @@ def dynamics(state, u, dt=0.05, rnn_model=None, hidden_state=None, p=PARAMS, int
 
 
 def compute_reward(old_state, state, u, outcome, z_ref=0.0, u_prev=0.0):
-    """Computes the step reward based on mission progress and soft landing."""
+    """Reward tracking and landing; positive targets have a 0.2 m deadband."""
 
     hubber_loss = lambda x, delta=1.0: 0.5 * x**2 if abs(x) <= delta else delta * (abs(x) - 0.5 * delta)
 
@@ -133,8 +134,11 @@ def compute_reward(old_state, state, u, outcome, z_ref=0.0, u_prev=0.0):
         return -1000.0
 
     z, vz, _ = state
-    # Tracking error penalty
-    r_track = -10.0 * hubber_loss(z - z_ref)
+    # Penalize distance outside the band; zero/negative targets stay exact.
+    z_error = z - z_ref
+    if z_ref > 0.0:
+        z_error = max(abs(z_error) - Z_TRACK_TOLERANCE, 0.0)
+    r_track = -10.0 * hubber_loss(z_error)
     # Velocity penalty
     r_vel = -1.0 * hubber_loss(vz)
     # Control effort penalty

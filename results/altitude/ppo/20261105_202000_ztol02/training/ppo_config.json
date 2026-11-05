@@ -1,0 +1,55 @@
+{
+  "total_timesteps": 500000,
+  "seed": 0,
+  "n_envs": 10,
+  "initial_log_std": null,
+  "ppo": {
+    "learning_rate": 0.0001,
+    "n_steps": 256,
+    "batch_size": 128,
+    "gamma": 0.99,
+    "gae_lambda": 0.95,
+    "n_epochs": 10,
+    "clip_range": 0.2,
+    "clip_range_vf": null,
+    "normalize_advantage": true,
+    "ent_coef": 0.0,
+    "vf_coef": 0.5,
+    "max_grad_norm": 0.5,
+    "use_sde": false,
+    "sde_sample_freq": -1,
+    "target_kl": null,
+    "stats_window_size": 100,
+    "policy_kwargs": null
+  },
+  "metadata": {
+    "algorithm": "PPO",
+    "source_config": "/home/rayan768/CS/drone/EI-DATA-DRIVEN-CONTROL/src/policy/config/ppo.json",
+    "environment": "policy.lib.droneEnv.DroneEnv",
+    "stable_baselines3": "2.9.2",
+    "torch": "2.11.0+cu130",
+    "actual_timesteps": 501760,
+    "checkpoint": "/home/rayan768/CS/drone/EI-DATA-DRIVEN-CONTROL/results/altitude/ppo/20261105_202000_ztol02/training/best_model.zip",
+    "matlab_export": {
+      "status": "exported",
+      "policy": "/home/rayan768/CS/drone/EI-DATA-DRIVEN-CONTROL/results/altitude/ppo/20261105_202000_ztol02/training/policy.mat",
+      "trajectory": "/home/rayan768/CS/drone/EI-DATA-DRIVEN-CONTROL/results/altitude/ppo/20261105_202000_ztol02/training/traj_model.mat"
+    },
+    "rnn_path": "/home/rayan768/CS/drone/EI-DATA-DRIVEN-CONTROL/src/model/checkpoints/rnn_z.pt",
+    "mission": {
+      "initial_altitude_m": 0.0,
+      "hover_altitude_m": 2.0,
+      "climb_start_s": 2.0,
+      "landing_start_s": 6.0,
+      "landing_altitude_m": -0.3
+    },
+    "results": "/home/rayan768/CS/drone/EI-DATA-DRIVEN-CONTROL/results/altitude/ppo/20261105_202000_ztol02",
+    "reward": {
+      "positive_reference_deadband_m": 0.2,
+      "active_when": "z_ref > 0",
+      "tracking_error_outside_band": "max(abs(z - z_ref) - 0.2, 0)",
+      "zero_and_negative_references": "original full tracking error",
+      "source_sha256": "dbd6ac5d2970e5c79155f4fdd7ebc85e143751c7d4bb322390c0bd1647eb5ac7"
+    }
+  }
+}
