@@ -47,6 +47,7 @@ Z_MAX = 10.0            # Ceiling altitude limit (m)
 Z_TRACK_TOLERANCE = 0.2 # Tracking deadband for strictly positive references (m)
 SAFE_VZ = 0.5          # Maximum vertical touchdown speed for soft landing (m/s)
 MAX_STEPS = 200        # Mission length: 10 s at Ts = 0.05 s
+CURRICULUM_HEIGHTS = (0.5, 1.0, 2.0, 5.0)
 
 
 def default_mission(t):
@@ -153,7 +154,7 @@ class DroneEnv(gym.Env):
     """Gymnasium environment for 1D vertical drone flight and landing."""
     metadata = {"render_modes": []}
 
-    def __init__(self, rnn_model=None, params=PARAMS, max_steps=MAX_STEPS, integrate_z=False, mission=None):
+    def __init__(self, rnn_model=None, params=PARAMS, max_steps=MAX_STEPS, integrate_z=False, mission=None, difficulty=None):
         super().__init__()
         self.p = params
         self.max_steps = max_steps
@@ -180,6 +181,17 @@ class DroneEnv(gym.Env):
         self.mission = mission if mission is not None else default_mission
         if not callable(self.mission):
             raise TypeError("mission must be callable: mission(t) -> target altitude")
+        self.difficulty = None
+        self._next_difficulty = None
+        self._target_reached = False
+        if difficulty is not None:
+            self.set_difficulty(difficulty)
+
+    def set_difficulty(self, level):
+        """Queue a height index for the next reset; the current mission stays fixed."""
+        if not isinstance(level, (int, np.integer)):
+            raise TypeError("difficulty must be an integer height index")
+        self._next_difficulty = int(level) % len(CURRICULUM_HEIGHTS)
 
     def _obs(self):
         """Use only the reference at the current time; provide no future targets."""
@@ -194,7 +206,11 @@ class DroneEnv(gym.Env):
             soft = abs(vz) <= SAFE_VZ
             landing_phase = self.mission(self.t) == Z_LAND
             return "landed" if soft and landing_phase else "crashed"
-        if z > Z_MAX:
+        # The 10 m curriculum target needs room for its tracking tolerance.
+        ceiling = Z_MAX if self.difficulty is None else max(
+            Z_MAX, CURRICULUM_HEIGHTS[self.difficulty] + Z_TRACK_TOLERANCE,
+        )
+        if z > ceiling:
             return "lost"
         if self.steps >= self.max_steps:
             return "timeout"
@@ -206,6 +222,12 @@ class DroneEnv(gym.Env):
             if not callable(new_mission):
                 raise TypeError("mission must be callable: mission(t) -> target altitude")
             self.mission = new_mission
+            self._next_difficulty = None
+            self.difficulty = None
+        elif self._next_difficulty is not None:
+            self.difficulty = self._next_difficulty
+            height = CURRICULUM_HEIGHTS[self.difficulty]
+            self.mission = lambda t: 0.0 if t < 2.0 else (height if t < 6.0 else Z_LAND)
         super().reset(seed=seed, options=options)
         z0 = 0.0
         vz0 = 0.0
@@ -217,6 +239,7 @@ class DroneEnv(gym.Env):
         self.t = 0.0
         self.u_prev = 0.0
         self.az_prev = az0
+        self._target_reached = False
 
         z_ref = self.mission(self.t)
         info = {
@@ -253,6 +276,8 @@ class DroneEnv(gym.Env):
         status = self.outcome()
 
         z_ref = self.mission(self.t)
+        if z_ref > 0.0 and abs(float(self.state[0]) - z_ref) <= Z_TRACK_TOLERANCE:
+            self._target_reached = True
         reward = compute_reward(old, self.state, u, status, z_ref=z_ref, u_prev=self.u_prev)
 
         terminated = (status != "flying")
@@ -261,6 +286,8 @@ class DroneEnv(gym.Env):
         # Measurements dictionary required by export_policy.py and Simulink evaluation
         info = {
             "outcome": status,
+            "difficulty": self.difficulty,
+            "is_success": status == "landed" and self._target_reached,
             "m": {
                 "t": self.t,
                 "z": float(self.state[0]),

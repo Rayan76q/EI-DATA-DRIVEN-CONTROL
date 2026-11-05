@@ -1,6 +1,7 @@
 """Policy training with saved settings, checkpoints and TensorBoard logs."""
 
 import json
+from collections import deque
 from pathlib import Path
 
 if __package__ in {None, ""}:
@@ -11,16 +12,64 @@ if __package__ in {None, ""}:
 import numpy as np
 import torch
 from stable_baselines3 import DQN, PPO, SAC, __version__ as sb3_version
-from stable_baselines3.common.callbacks import EvalCallback
+from stable_baselines3.common.callbacks import BaseCallback, EvalCallback
 from stable_baselines3.common.env_util import make_vec_env
 
 from .export_policy import export_for_matlab
-from .lib.droneEnv import DroneEnv, Z_LAND
+from .lib.droneEnv import CURRICULUM_HEIGHTS, DroneEnv, Z_LAND
 
 
 CONFIG_DIR = Path(__file__).resolve().parent / "config"
 DEFAULT_CONFIG = CONFIG_DIR / "ppo.json"
 POLICY = "ppo"
+
+
+class CurriculumCallback(BaseCallback):
+    """Cycle z heights after 85% success over 20 completed episodes.
+
+    ``difficulty`` is the starting index k in [0.5, 1, 2, 5, 10]. Environments
+    apply changes at reset. Success means reaching the target, then landing softly.
+    For direct SB3 use, initialize DroneEnv(difficulty=callback.difficulty).
+    """
+
+    heights = CURRICULUM_HEIGHTS
+
+    def __init__(self, difficulty=0, success_threshold=0.85, window_size=20, verbose=0):
+        super().__init__(verbose)
+        if not isinstance(difficulty, (int, np.integer)):
+            raise TypeError("difficulty must be an integer height index")
+        if not isinstance(window_size, int) or window_size <= 0:
+            raise ValueError("window_size must be a positive integer")
+        if not 0.0 <= success_threshold <= 1.0:
+            raise ValueError("success_threshold must be between 0 and 1")
+        self.difficulty = int(difficulty) % len(self.heights)
+        self.success_threshold = success_threshold
+        self.successes = deque(maxlen=window_size)
+
+    def _on_training_start(self):
+        self.successes.clear()
+        self.training_env.env_method("set_difficulty", self.difficulty)
+
+    def _on_step(self):
+        for done, info in zip(self.locals["dones"], self.locals["infos"]):
+            # Ignore episodes still finishing the previous difficulty.
+            if done and info.get("difficulty") == self.difficulty:
+                self.successes.append(bool(info["is_success"]))
+        return True
+
+    def _on_rollout_end(self):
+        self.logger.record("curriculum/difficulty", self.difficulty)
+        self.logger.record("curriculum/height", self.heights[self.difficulty])
+        if not self.successes:
+            return
+        success_rate = float(np.mean(self.successes))
+        self.logger.record("curriculum/success_rate", success_rate)
+        if len(self.successes) == self.successes.maxlen and success_rate >= self.success_threshold:
+            self.difficulty = (self.difficulty + 1) % len(self.heights)
+            self.successes.clear()
+            self.training_env.env_method("set_difficulty", self.difficulty)
+            if self.verbose:
+                print(f"Curriculum: k={self.difficulty}, height={self.heights[self.difficulty]:g} m")
 
 
 def ref_mission(t):
@@ -44,6 +93,7 @@ def train_ppo(
     env_class=DroneEnv,
     initial_log_std=None,
     config_path=DEFAULT_CONFIG,
+    curriculum=None,
     **ppo_params,
 ):
     """Train PPO, export its selected checkpoint, and return the agent/path.
@@ -51,6 +101,7 @@ def train_ppo(
     Each environment has its own recurrent state and shares the RNN weights.
     Use ``lib.droneEnvRotation.DroneEnv`` for the rotation environment.
     Explicit arguments override the config. None uses the configured value.
+    Pass CurriculumCallback(...) to enable the altitude curriculum.
     """
     config = load_ppo_config(config_path)
     total_timesteps = config["total_timesteps"] if total_timesteps is None else total_timesteps
@@ -62,6 +113,8 @@ def train_ppo(
         raise ValueError("total_timesteps must be positive")
     if n_envs <= 0:
         raise ValueError("n_envs must be positive")
+    if curriculum is not None and not issubclass(env_class, DroneEnv):
+        raise ValueError("Curriculum requires the z-only DroneEnv")
 
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -80,9 +133,17 @@ def train_ppo(
         },
     }
     config_snapshot = output_dir / "ppo_config.json"
+    if curriculum is not None:
+        resolved_config["curriculum"] = {
+            "difficulty": curriculum.difficulty, "heights": list(curriculum.heights),
+            "success_threshold": curriculum.success_threshold,
+            "window_size": curriculum.successes.maxlen,
+        }
     config_snapshot.write_text(json.dumps(resolved_config, indent=2) + "\n")
     train_env = make_vec_env(
-        lambda: env_class(rnn_model=rnn_model, mission=mission),
+        lambda: env_class(rnn_model=rnn_model, mission=mission, **(
+            {"difficulty": curriculum.difficulty} if curriculum is not None else {}
+        )),
         n_envs=n_envs,
         seed=seed,
         monitor_dir=str(output_dir),
@@ -110,15 +171,18 @@ def train_ppo(
             deterministic=True,
             verbose=0,
         )
-        agent.learn(total_timesteps=total_timesteps, callback=callback, tb_log_name="PPO")
+        callbacks = callback if curriculum is None else [curriculum, callback]
+        agent.learn(total_timesteps=total_timesteps, callback=callbacks, tb_log_name="PPO")
         # SB3 logs before each update; save the final update's losses too.
         agent.logger.dump(step=agent.num_timesteps)
         agent.logger.close()
         final_path = output_dir / "ppo_drone_rnn.zip"
         agent.save(final_path)
         best_path = output_dir / "best_model.zip"
+        # Fixed 2 m evaluation cannot select progress across curriculum heights.
         checkpoint_path = (
-            best_path if best_path.is_file() and callback.best_mean_reward > float("-inf") else final_path
+            best_path if curriculum is None and best_path.is_file()
+            and callback.best_mean_reward > float("-inf") else final_path
         )
         resolved_config["metadata"].update(
             actual_timesteps=agent.num_timesteps,
@@ -159,16 +223,20 @@ def train_off_policy(
     n_envs=None,
     env_class=DroneEnv,
     config_path=None,
+    curriculum=None,
     **params,
 ):
     """Train DQN or SAC, export the selected checkpoint, and return agent/path.
 
     DQN uses the altitude command grid from its config. SAC keeps the
     environment's continuous actions. Explicit arguments override the config.
+    SAC accepts CurriculumCallback(...) for the altitude curriculum.
     """
     algorithm = algorithm.lower()
     if algorithm not in {"dqn", "sac"}:
         raise ValueError("algorithm must be 'dqn' or 'sac'")
+    if curriculum is not None and (algorithm != "sac" or not issubclass(env_class, DroneEnv)):
+        raise ValueError("Curriculum requires SAC with the z-only DroneEnv")
     config_path = CONFIG_DIR / f"{algorithm}.json" if config_path is None else config_path
     config = json.loads(Path(config_path).expanduser().read_text())
     total_timesteps = config["total_timesteps"] if total_timesteps is None else total_timesteps
@@ -195,8 +263,10 @@ def train_off_policy(
         commands = np.linspace(grid["low"], grid["high"], count, dtype=np.float32)
         np.save(output_dir / "commands.npy", commands)
 
-    def make_env():
-        env = env_class(rnn_model=rnn_model, mission=mission)
+    def make_env(training=False):
+        env = env_class(rnn_model=rnn_model, mission=mission, **(
+            {"difficulty": curriculum.difficulty} if training and curriculum is not None else {}
+        ))
         return env if commands is None else DiscreteDroneActions(env, commands)
 
     resolved_config = {
@@ -216,9 +286,15 @@ def train_off_policy(
         resolved_config["action_grid"] = config["action_grid"]
         resolved_config["metadata"]["commands"] = str((output_dir / "commands.npy").resolve())
     config_snapshot = output_dir / f"{algorithm}_config.json"
+    if curriculum is not None:
+        resolved_config["curriculum"] = {
+            "difficulty": curriculum.difficulty, "heights": list(curriculum.heights),
+            "success_threshold": curriculum.success_threshold,
+            "window_size": curriculum.successes.maxlen,
+        }
     config_snapshot.write_text(json.dumps(resolved_config, indent=2) + "\n")
     train_env = make_vec_env(
-        make_env, n_envs=n_envs, seed=seed, monitor_dir=str(output_dir),
+        lambda: make_env(training=True), n_envs=n_envs, seed=seed, monitor_dir=str(output_dir),
     )
     eval_env = make_vec_env(make_env, n_envs=1, seed=100)
     agent = None
@@ -237,16 +313,19 @@ def train_off_policy(
             deterministic=True,
             verbose=0,
         )
+        callbacks = callback if curriculum is None else [curriculum, callback]
         agent.learn(
-            total_timesteps=total_timesteps, callback=callback,
+            total_timesteps=total_timesteps, callback=callbacks,
             tb_log_name=algorithm.upper(),
         )
         agent.logger.dump(step=agent.num_timesteps)
         final_path = output_dir / f"{algorithm}_drone_rnn.zip"
         agent.save(final_path)
         best_path = output_dir / "best_model.zip"
+        # Keep the policy trained through all stages when using a curriculum.
         checkpoint_path = (
-            best_path if best_path.is_file() and callback.best_mean_reward > float("-inf") else final_path
+            best_path if curriculum is None and best_path.is_file()
+            and callback.best_mean_reward > float("-inf") else final_path
         )
         resolved_config["metadata"].update(
             actual_timesteps=agent.num_timesteps,
@@ -296,10 +375,14 @@ def main():
                         help="Altitude dynamics checkpoint")
     parser.add_argument("--config", type=Path, help="Training settings JSON (default: policy/config/<policy>.json)")
     parser.add_argument("--steps", type=int, help="Training timesteps; overrides the config")
+    parser.add_argument("--curriculum", type=int, nargs="?", const=0, metavar="K",
+                        help="Cycle z heights for PPO/SAC, starting at index K (default: 0)")
     parser.add_argument("--seed", type=int, help="Random seed; overrides the config")
     parser.add_argument("--output-dir", type=Path, help="Directory for the training run and results")
     parser.add_argument("--show", action="store_true", help="Also display the saved plots")
     args = parser.parse_args()
+    if args.curriculum is not None and args.policy == "dqn":
+        parser.error("--curriculum supports PPO or SAC")
     config_path = (args.config or CONFIG_DIR / f"{args.policy}.json").expanduser().resolve()
     try:
         config = json.loads(config_path.read_text())
@@ -329,6 +412,8 @@ def main():
     print(f"{args.policy.upper()} training: {steps:,} requested steps", flush=True)
     started = time.perf_counter()
     training_args = dict(total_timesteps=steps, seed=seed, config_path=config_path)
+    if args.curriculum is not None:
+        training_args["curriculum"] = CurriculumCallback(difficulty=args.curriculum, verbose=1)
     if args.policy == "ppo":
         agent, checkpoint_path = train_ppo(rnn_model, ref_mission, training_dir, **training_args)
     else:
