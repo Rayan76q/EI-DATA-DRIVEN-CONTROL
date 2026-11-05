@@ -1,4 +1,4 @@
-from Simulation3D import initialize_visualizer, set_axes, creation_modele_drone, animate_episode, test_trajectory, test_trajectory2, simu_bdd, add_moving_grid
+from simulation_3d import initialize_visualizer, set_axes, creation_modele_drone, animate_episode, test_trajectory, test_trajectory2, simu_bdd, add_moving_grid
 
 if __name__ == "__main__":
     vis = initialize_visualizer()
