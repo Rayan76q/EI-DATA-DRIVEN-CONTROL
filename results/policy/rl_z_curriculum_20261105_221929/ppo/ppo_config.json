@@ -2,10 +2,7 @@
   "total_timesteps": 500000,
   "seed": 0,
   "n_envs": 10,
-  "initial_log_std": [
-    -1.5,
-    -3.0
-  ],
+  "initial_log_std": null,
   "ppo": {
     "learning_rate": 0.0001,
     "n_steps": 256,
@@ -28,14 +25,26 @@
   "metadata": {
     "algorithm": "PPO",
     "source_config": "/home/rayan768/CS/drone/EI-DATA-DRIVEN-CONTROL/src/policy/config/ppo.json",
-    "environment": "policy.lib.droneEnvRotation.DroneEnv",
+    "environment": "policy.lib.droneEnv.DroneEnv",
     "stable_baselines3": "2.9.2",
     "torch": "2.11.0+cu130",
     "actual_timesteps": 501760,
-    "checkpoint": "/home/rayan768/CS/drone/EI-DATA-DRIVEN-CONTROL/results/policy/rl_z_angles_tuned_20261105_205529/ppo/best_model.zip",
+    "checkpoint": "/home/rayan768/CS/drone/EI-DATA-DRIVEN-CONTROL/results/policy/rl_z_curriculum_20261105_221929/ppo/ppo_drone_rnn.zip",
     "matlab_export": {
-      "status": "unsupported_environment",
-      "reason": "MATLAB export requires 3 altitude observations and 1 action"
+      "status": "exported",
+      "policy": "/home/rayan768/CS/drone/EI-DATA-DRIVEN-CONTROL/results/policy/rl_z_curriculum_20261105_221929/ppo/policy.mat",
+      "trajectory": "/home/rayan768/CS/drone/EI-DATA-DRIVEN-CONTROL/results/policy/rl_z_curriculum_20261105_221929/ppo/traj_model.mat"
     }
+  },
+  "curriculum": {
+    "difficulty": 0,
+    "heights": [
+      0.5,
+      1.0,
+      2.0,
+      5.0
+    ],
+    "success_threshold": 0.85,
+    "window_size": 20
   }
 }

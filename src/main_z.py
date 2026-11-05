@@ -18,7 +18,7 @@ from policy.lib.droneEnv import DroneEnv, Z_LAND
 from policy.lib.discrete_actions import DiscreteDroneActions
 from policy.evaluation import evaluate_policy, plot_learning_curve
 from policy.export_policy import export_for_matlab
-from policy.training import CONFIG_DIR, ref_mission, train_off_policy, train_ppo
+from policy.training import CONFIG_DIR, CurriculumCallback, ref_mission, train_off_policy, train_ppo
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -37,12 +37,16 @@ def main():
                         help="Altitude dynamics checkpoint (default: model/checkpoints/rnn_z.pt)")
     parser.add_argument("--config", type=Path, help="Training settings JSON (default: policy/config/<algo>.json)")
     parser.add_argument("--steps", type=int, help="Training timesteps; overrides the config")
+    parser.add_argument("--curriculum", type=int, nargs="?", const=0, metavar="K",
+                        help="With --train: cycle z heights, starting at index K (default: 0)")
     parser.add_argument("--seed", type=int, help="Random seed; overrides the config")
     parser.add_argument("--output-dir", type=Path, help="Directory for plots, metrics, trajectories and MATLAB export")
     parser.add_argument("--show", action="store_true", help="Also display the saved plots")
     args = parser.parse_args()
     if args.steps is not None and args.steps <= 0:
         parser.error("--steps must be positive")
+    if args.curriculum is not None and (not args.train or args.algo == "dqn"):
+        parser.error("--curriculum requires --train with PPO or SAC")
     config_path = (args.config or CONFIG_DIR / f"{args.algo}.json").expanduser().resolve()
     try:
         config = json.loads(config_path.read_text())
@@ -101,6 +105,8 @@ def main():
             print(f"{args.algo.upper()} training: {steps:,} requested steps")
             started = time.perf_counter()
             training_args = dict(total_timesteps=steps, seed=seed, config_path=config_path)
+            if args.curriculum is not None:
+                training_args["curriculum"] = CurriculumCallback(difficulty=args.curriculum, verbose=1)
             if args.algo == "ppo":
                 agent, checkpoint_path = train_ppo(
                     rnn_model, ref_mission, output_dir / "training", **training_args,
