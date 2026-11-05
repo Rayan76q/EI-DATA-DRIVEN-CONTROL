@@ -1,0 +1,25 @@
+{
+  "total_timesteps": 500000,
+  "seed": 0,
+  "n_envs": 10,
+  "initial_log_std": null,
+  "ppo": {
+    "learning_rate": 0.0001,
+    "n_steps": 256,
+    "batch_size": 128,
+    "gamma": 0.99,
+    "gae_lambda": 0.95,
+    "n_epochs": 10,
+    "clip_range": 0.2,
+    "clip_range_vf": null,
+    "normalize_advantage": true,
+    "ent_coef": 0.0,
+    "vf_coef": 0.5,
+    "max_grad_norm": 0.5,
+    "use_sde": false,
+    "sde_sample_freq": -1,
+    "target_kl": null,
+    "stats_window_size": 100,
+    "policy_kwargs": null
+  }
+}

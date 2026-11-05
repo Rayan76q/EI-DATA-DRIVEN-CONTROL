@@ -1,0 +1,28 @@
+{
+  "total_timesteps": 500000,
+  "seed": 0,
+  "n_envs": 4,
+  "action_grid": {
+    "low": -3.0,
+    "high": 3.0,
+    "count": 61
+  },
+  "dqn": {
+    "learning_rate": 0.0001,
+    "buffer_size": 100000,
+    "learning_starts": 2000,
+    "batch_size": 128,
+    "gamma": 0.99,
+    "tau": 1.0,
+    "train_freq": 4,
+    "gradient_steps": 4,
+    "target_update_interval": 1000,
+    "exploration_fraction": 0.8,
+    "exploration_initial_eps": 1.0,
+    "exploration_final_eps": 0.05,
+    "max_grad_norm": 0.5,
+    "policy_kwargs": {
+      "net_arch": [64, 64]
+    }
+  }
+}
