@@ -2,7 +2,7 @@ import numpy as np
 from Simulation3D.calculate_next_state import calculate_next_state
 from Simulation3D.config import INITIAL_STATE, TE
 
-def from_derivatives_to_coordinates(sequence_derivatives, type_of_bdd):
+def calculate_coordinates(sequence_derivatives, type_of_bdd):
     sequence_coordinates = []#t, x, y, z, phi, theta, psi
     
     def append_coordinates(state, time):

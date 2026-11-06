@@ -93,7 +93,7 @@ def hsv_to_hex(h, s, v):
     g = round((g + m) * 255)
     b = round((b + m) * 255)
 
-    return f"#{r:02X}{g:02X}{b:02X}"
+    return (r << 16) | (g << 8) | b
 
 def segment_transform(p0, p1):
     """4x4 transform placing a y-aligned Cylinder of height L between p0 and p1."""

@@ -1,10 +1,10 @@
 import numpy as np
-from Simulation3D.from_derivatives_to_coordinates import from_derivatives_to_coordinates
+from Simulation3D.calculate_coordinates import calculate_coordinates
 from Simulation3D.config import TE
 
 def test_trajectory2():
     sequence_derivatives = generate_derivatives_all_angles()
-    return (from_derivatives_to_coordinates(sequence_derivatives, type_of_bdd=2))
+    return (calculate_coordinates(sequence_derivatives, type_of_bdd=2))
 
 def generate_derivatives(duration=10.0, mode="profile", seed=0):
     """Return an array of shape (N, 6), one row per time step.
