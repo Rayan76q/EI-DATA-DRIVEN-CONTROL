@@ -207,33 +207,83 @@ python src/main_z.py --rl-model sac \
   --output-dir results/altitude/sac_replay
 ```
 
-The main finds the latest training run for the chosen algorithm under
-`results/altitude/<algorithm>/`, then falls back to a supplied checkpoint.
-Use `--policy PATH` to select an exact checkpoint.
+The main first uses `checkpoint` from the algorithm config when set, then
+`initial_checkpoint`.
+Otherwise it finds the latest training run under `results/altitude/<algorithm>/`,
+then falls back to a supplied checkpoint. `--policy PATH` overrides this selection.
 
 The training script and main load `src/policy/config/<algorithm>.json`;
 `--config` selects another file for that algorithm. Explicit `--steps` and
 `--seed` arguments override
 its values. Resolved settings are saved as `training/<algo>_config.json`
 beside each run's checkpoints and monitor logs. These snapshots can also be
-passed to `--config`. The RL notebook's PPO cell uses the same PPO config and
-training function; its historical DQN/SAC cells keep their own settings.
+passed to `--config`. All RL notebooks load the same algorithm configs for
+timestep budgets, environment counts, seeds and model parameters. The comparison
+notebooks also load DQN's command grid from its config; PPO and SAC use the shared
+training functions.
 
-All three configs start at 500,000 steps, learning rate 0.0001 and discount
-0.99. DQN and SAC use four environments, a 100,000-transition replay buffer,
-2,000 warmup steps, batches of 128 and two hidden layers of 64 units.
-These are starting parameters, not validated optima for the mission.
+All three configs request 500,000 total steps with discount 0.99. DQN and PPO
+use 10 training environments; SAC restores its successful `ztol02` run's 4
+environments. DQN restores the successful run's `n_steps=3`, `tau=0.1`,
+`max_grad_norm=10`, `train_freq=5` and `gradient_steps=-1`: 50 collected
+transitions are followed by 50 gradient updates after its 1,000-step warmup.
+DQN and SAC use a 100,000-transition replay buffer, batches of 128 and two
+hidden layers of 64 units. Their learning settings are algorithm-specific.
+SAC restores `train_freq=4` and `gradient_steps=4`: 16 transitions before
+4 updates. Matching only that update ratio with 10 environments did not
+reproduce the successful policy. Its warmup is 2,000 transitions.
+
+For DQN and SAC, `eval_freq` in the JSON config is measured in total environment
+transitions (5,000 for DQN and 20,480 for SAC), divided by `n_envs` for the SB3 callback.
+For altitude training, SAC defaults to the same fixed 2 m mission as DQN in
+the notebooks and the main. Set `curriculum_difficulty` in its config or pass `--curriculum K`
+to opt into the altitude curriculum. Evaluation saves checkpoints without
+stopping training on a reward threshold.
+
+The restored DQN checkpoint lands at 7.75 s; an independent reproduction
+matched all 75 evaluations through 375,000 transitions exactly. Its restored
+run is under `results/altitude/dqn/20261106_restored_baseline/`.
+SAC now starts from `results/altitude/sac/20261105_202000_ztol02/training/best_model.zip`
+at 327,680 steps. Replaying it reproduces the saved trajectory exactly: it
+peaks at 2.090 m and lands at 7.45 s with vertical speed -0.329 m/s. The same
+run's final 500,000-step policy crashes; it is not the selected starting policy.
+The replay and final-policy comparison are under
+`results/altitude/sac/20261106_ztol_baseline_verification/`.
+
+SAC's `initial_checkpoint` is shared by the altitude notebook and main for
+further training. Training loads its weights and optimizer state,
+evaluates it before any updates, and includes it in best-checkpoint selection.
+It still runs the full requested budget. The 500,000-step target includes the
+starting policy's 327,680 steps, leaving 172,320 new transitions. The old zip
+does not contain a replay buffer, so a new buffer receives 2,000 warmup
+transitions before updates; this is a warm start, not an exact continuation.
+Run with `--from-scratch` for an independent 500,000-step SAC comparison, or
+set `initial_checkpoint` to null. The rotation notebook starts SAC from scratch
+because the altitude policy has incompatible observations and actions.
+
+Continuing this baseline to 500,000 total steps produced a better selected
+checkpoint at 389,120 steps: landing at 7.55 s, return -70.05 (previously -215.93),
+altitude MAE 0.365 m (previously 0.375 m), and RMS command changes 1.896
+(previously 2.096). The shared config's `checkpoint` selects it for replay in
+the main and altitude notebook. Results, final-policy evaluation and verification
+are under `results/altitude/sac/20261106_ztol_warm_start_500k/`. The final policy
+times out: later training still regresses, so this does not establish stable
+SAC convergence. The original checkpoint remains the training starting point.
+
+The unsuccessful later SAC experiments are preserved under
+`results/altitude/sac/20261106_recovered_baseline/` and
+`results/policy/sac_recovery_20261106/`; they no longer override this baseline.
 
 | Algorithm | Collective command | Exploration |
 | --- | --- | --- |
 | PPO | Continuous, −3 to 3 | Existing Gaussian policy settings |
-| DQN | 61 values, −3 to 3 in steps of 0.1 | Epsilon decreases from 1 to 0.05 over 80% of training |
+| DQN | 61 values, −3 to 3 in steps of 0.1 | Epsilon decreases from 1 to 0.05 over the full training run |
 | SAC | Continuous, −3 to 3 | State-dependent noise and learned entropy coefficient, initially 0.05 |
 
 DQN checkpoints require the accompanying `commands.npy` in the same
 directory. Evaluation plots, trajectory files and MATLAB exports contain
-physical commands, not DQN indices. PPO has a supplied checkpoint; train
-DQN/SAC first to make them available to the main.
+physical commands, not DQN indices. Saved checkpoints for all three algorithms
+are available to the main.
 
 Training may round the budget up to a complete rollout or collection block.
 Training selects the best checkpoint when available and always saves the

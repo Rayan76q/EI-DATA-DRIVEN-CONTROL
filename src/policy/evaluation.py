@@ -128,6 +128,16 @@ def evaluate_policy(agent, env, output_dir, *, seed=100, show=False):
     return metrics
 
 
+def training_step_offset(log_dir):
+    """Return the steps already trained before this run's monitor logs."""
+    for path in Path(log_dir).glob("*_config.json"):
+        config = json.loads(path.read_text())
+        warm_start = config.get("metadata", {}).get("warm_start", {})
+        if warm_start:
+            return int(warm_start["initial_timesteps"])
+    return 0
+
+
 def plot_learning_curve(log_dir, output_path, *, show=False):
     """Plot episode returns and deterministic evaluations."""
     import matplotlib.pyplot as plt
@@ -136,7 +146,7 @@ def plot_learning_curve(log_dir, output_path, *, show=False):
     log_dir = Path(log_dir)
     history = load_results(str(log_dir))
     returns = history["r"].to_numpy()
-    steps = history["l"].cumsum().to_numpy()
+    steps = history["l"].cumsum().to_numpy() + training_step_offset(log_dir)
     fig, ax = plt.subplots(figsize=(9, 3))
     ax.plot(steps, returns, alpha=0.25, label="Episode return")
     window = min(20, len(returns))

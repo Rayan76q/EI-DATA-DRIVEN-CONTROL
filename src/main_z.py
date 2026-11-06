@@ -18,7 +18,10 @@ from policy.lib.droneEnv import DroneEnv, Z_LAND
 from policy.lib.discrete_actions import DiscreteDroneActions
 from policy.evaluation import evaluate_policy, plot_learning_curve
 from policy.export_policy import export_for_matlab
-from policy.training import CONFIG_DIR, CurriculumCallback, ref_mission, train_off_policy, train_ppo
+from policy.training import (
+    CONFIG_DIR, CurriculumCallback, configured_checkpoint,
+    ref_mission, train_off_policy, train_ppo,
+)
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -37,6 +40,8 @@ def main():
                         help="Altitude dynamics checkpoint (default: model/checkpoints/rnn_z.pt)")
     parser.add_argument("--config", type=Path, help="Training settings JSON (default: policy/config/<algo>.json)")
     parser.add_argument("--steps", type=int, help="Training timesteps; overrides the config")
+    parser.add_argument("--from-scratch", action="store_true",
+                        help="With --train and SAC: ignore the configured starting policy")
     parser.add_argument("--curriculum", type=int, nargs="?", const=0, metavar="K",
                         help="With --train: cycle z heights, starting at index K (default: 0)")
     parser.add_argument("--seed", type=int, help="Random seed; overrides the config")
@@ -45,6 +50,8 @@ def main():
     args = parser.parse_args()
     if args.steps is not None and args.steps <= 0:
         parser.error("--steps must be positive")
+    if args.from_scratch and (not args.train or args.algo != "sac"):
+        parser.error("--from-scratch requires --train with SAC")
     if args.curriculum is not None and (not args.train or args.algo == "dqn"):
         parser.error("--curriculum requires --train with PPO or SAC")
     config_path = (args.config or CONFIG_DIR / f"{args.algo}.json").expanduser().resolve()
@@ -58,7 +65,10 @@ def main():
         parser.error(str(error))
     agent_class = {"ppo": PPO, "dqn": DQN, "sac": SAC}[args.algo]
     if not args.train:
-        checkpoint_path = args.policy
+        checkpoint_path = (
+            args.policy or configured_checkpoint(config)
+            or configured_checkpoint(config, "initial_checkpoint")
+        )
         if checkpoint_path is None:
             runs = sorted(
                 (PROJECT_ROOT / "results" / "altitude" / args.algo).glob(f"*/training/{args.algo}_config.json"),
@@ -113,7 +123,8 @@ def main():
                 )
             else:
                 agent, checkpoint_path = train_off_policy(
-                    args.algo, rnn_model, ref_mission, output_dir / "training", **training_args,
+                    args.algo, rnn_model, ref_mission, output_dir / "training",
+                    from_scratch=args.from_scratch, **training_args,
                 )
             print(f"Selected checkpoint: {agent.num_timesteps:,} steps; {time.perf_counter() - started:.1f} s")
             print(f"TensorBoard: tensorboard --logdir {output_dir / 'training' / 'tensorboard'}")

@@ -47,7 +47,7 @@ Z_MAX = 10.0            # Ceiling altitude limit (m)
 Z_TRACK_TOLERANCE = 0.2 # Tracking deadband for strictly positive references (m)
 SAFE_VZ = 0.5          # Maximum vertical touchdown speed for soft landing (m/s)
 MAX_STEPS = 200        # Mission length: 10 s at Ts = 0.05 s
-CURRICULUM_HEIGHTS = (0.5, 1.0, 2.0, 5.0)
+CURRICULUM_HEIGHTS = (5.0, 2.0, 1.0, 0.5)  # Curriculum heights for training (m)
 
 
 def default_mission(t):

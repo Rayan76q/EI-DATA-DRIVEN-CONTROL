@@ -24,6 +24,25 @@ DEFAULT_CONFIG = CONFIG_DIR / "ppo.json"
 POLICY = "ppo"
 
 
+def configured_checkpoint(config, key="checkpoint"):
+    """Resolve a configured policy path relative to the project root."""
+    checkpoint = config.get(key)
+    if checkpoint is None:
+        return None
+    path = Path(checkpoint).expanduser()
+    if not path.is_absolute():
+        path = CONFIG_DIR.parents[2] / path
+    return path.resolve()
+
+
+class _WarmStartEvalCallback(EvalCallback):
+    """Include the starting policy in selection before any learning occurs."""
+
+    def _on_training_start(self):
+        self._on_step()
+        self.initial_mean_reward = self.last_mean_reward
+
+
 class CurriculumCallback(BaseCallback):
     """Cycle z heights after 85% success over 20 completed episodes.
 
@@ -34,7 +53,7 @@ class CurriculumCallback(BaseCallback):
 
     heights = CURRICULUM_HEIGHTS
 
-    def __init__(self, difficulty=0, success_threshold=0.85, window_size=20, verbose=0):
+    def __init__(self, difficulty=0, success_threshold=0.7, window_size=30, verbose=0):
         super().__init__(verbose)
         if not isinstance(difficulty, (int, np.integer)):
             raise TypeError("difficulty must be an integer height index")
@@ -224,29 +243,47 @@ def train_off_policy(
     env_class=DroneEnv,
     config_path=None,
     curriculum=None,
+    from_scratch=False,
     **params,
 ):
     """Train DQN or SAC, export the selected checkpoint, and return agent/path.
 
     DQN uses the altitude command grid from its config. SAC keeps the
     environment's continuous actions. Explicit arguments override the config.
-    SAC accepts CurriculumCallback(...) for the altitude curriculum.
+    ``eval_freq`` in the config counts total environment transitions.
+    SAC uses a fixed mission unless ``curriculum_difficulty`` is configured
+    or CurriculumCallback(...) is passed explicitly.
+    ``initial_checkpoint`` starts SAC from saved weights and optimizer state.
+    The timestep budget includes the checkpoint's existing steps. Its replay
+    buffer is not saved in the zip, so collect a fresh warmup before updates.
+    Pass ``from_scratch=True`` to ignore the configured starting checkpoint.
     """
     algorithm = algorithm.lower()
     if algorithm not in {"dqn", "sac"}:
         raise ValueError("algorithm must be 'dqn' or 'sac'")
-    if curriculum is not None and (algorithm != "sac" or not issubclass(env_class, DroneEnv)):
-        raise ValueError("Curriculum requires SAC with the z-only DroneEnv")
     config_path = CONFIG_DIR / f"{algorithm}.json" if config_path is None else config_path
     config = json.loads(Path(config_path).expanduser().read_text())
+    if curriculum is None and config.get("curriculum_difficulty") is not None:
+        curriculum = CurriculumCallback(difficulty=config["curriculum_difficulty"], verbose=1)
+    if curriculum is not None and (algorithm != "sac" or not issubclass(env_class, DroneEnv)):
+        raise ValueError("Curriculum requires SAC with the z-only DroneEnv")
     total_timesteps = config["total_timesteps"] if total_timesteps is None else total_timesteps
     seed = config["seed"] if seed is None else seed
     n_envs = config["n_envs"] if n_envs is None else n_envs
     params = {**config[algorithm], **params}
+    initial_checkpoint = None if from_scratch else configured_checkpoint(config, "initial_checkpoint")
+    if initial_checkpoint is not None:
+        if algorithm != "sac":
+            raise ValueError("initial_checkpoint is supported for SAC only")
+        if not initial_checkpoint.is_file():
+            raise FileNotFoundError(f"Starting checkpoint not found: {initial_checkpoint}")
+    eval_freq = config.get("eval_freq", 20_480)
     if total_timesteps <= 0:
         raise ValueError("total_timesteps must be positive")
     if n_envs <= 0:
         raise ValueError("n_envs must be positive")
+    if not isinstance(eval_freq, int) or isinstance(eval_freq, bool) or eval_freq <= 0:
+        raise ValueError("eval_freq must be a positive integer number of transitions")
 
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -274,6 +311,9 @@ def train_off_policy(
         "seed": seed,
         "n_envs": n_envs,
         algorithm: params,
+        "eval_freq": eval_freq,
+        "curriculum_difficulty": None if curriculum is None else curriculum.difficulty,
+        "initial_checkpoint": str(initial_checkpoint) if initial_checkpoint is not None else None,
         "metadata": {
             "algorithm": algorithm.upper(),
             "source_config": str(Path(config_path).expanduser().resolve()),
@@ -300,22 +340,50 @@ def train_off_policy(
     agent = None
     agent_class = DQN if algorithm == "dqn" else SAC
     try:
-        agent = agent_class(
-            "MlpPolicy", train_env, seed=seed, device="cpu", verbose=0,
-            tensorboard_log=str(output_dir / "tensorboard"), **params,
-        )
-        callback = EvalCallback(
+        initial_steps = 0
+        if initial_checkpoint is None:
+            agent = agent_class(
+                "MlpPolicy", train_env, seed=seed, device="cpu", verbose=0,
+                tensorboard_log=str(output_dir / "tensorboard"), **params,
+            )
+        else:
+            # SB3 adds use_sde to saved SAC policy_kwargs internally.
+            load_params = {**params, "policy_kwargs": {
+                **params.get("policy_kwargs", {}), "use_sde": params.get("use_sde", False),
+            }}
+            agent = agent_class.load(
+                initial_checkpoint, env=train_env, seed=seed, device="cpu", verbose=0,
+                tensorboard_log=str(output_dir / "tensorboard"), **load_params,
+            )
+            initial_steps = agent.num_timesteps
+            if total_timesteps <= initial_steps:
+                raise ValueError(
+                    f"total_timesteps ({total_timesteps}) must exceed the starting policy's "
+                    f"{initial_steps} steps; use from_scratch=True for a fresh run"
+                )
+            agent.learning_starts = initial_steps + params["learning_starts"]
+            resolved_config["metadata"]["warm_start"] = {
+                "checkpoint": str(initial_checkpoint),
+                "initial_timesteps": initial_steps,
+                "replay_buffer_restored": False,
+                "fresh_replay_warmup_transitions": params["learning_starts"],
+                "updates_start_after_total_timesteps": agent.learning_starts,
+            }
+            config_snapshot.write_text(json.dumps(resolved_config, indent=2) + "\n")
+        callback_class = _WarmStartEvalCallback if initial_checkpoint is not None else EvalCallback
+        callback = callback_class(
             eval_env,
             best_model_save_path=str(output_dir),
             log_path=str(output_dir),
-            eval_freq=max(1, 20_480 // n_envs),
+            eval_freq=max(1, eval_freq // n_envs),
             n_eval_episodes=1,
             deterministic=True,
             verbose=0,
         )
         callbacks = callback if curriculum is None else [curriculum, callback]
         agent.learn(
-            total_timesteps=total_timesteps, callback=callbacks,
+            total_timesteps=total_timesteps - initial_steps, callback=callbacks,
+            reset_num_timesteps=initial_checkpoint is None,
             tb_log_name=algorithm.upper(),
         )
         agent.logger.dump(step=agent.num_timesteps)
@@ -329,8 +397,12 @@ def train_off_policy(
         )
         resolved_config["metadata"].update(
             actual_timesteps=agent.num_timesteps,
+            new_timesteps=agent.num_timesteps - initial_steps,
             checkpoint=str(checkpoint_path.resolve()),
         )
+        resolved_config["checkpoint"] = str(checkpoint_path.resolve())
+        if initial_checkpoint is not None:
+            resolved_config["metadata"]["warm_start"]["initial_eval_return"] = callback.initial_mean_reward
         selected_agent = agent_class.load(checkpoint_path, device="cpu")
         export_env = make_env()
         try:
@@ -375,6 +447,8 @@ def main():
                         help="Altitude dynamics checkpoint")
     parser.add_argument("--config", type=Path, help="Training settings JSON (default: policy/config/<policy>.json)")
     parser.add_argument("--steps", type=int, help="Training timesteps; overrides the config")
+    parser.add_argument("--from-scratch", action="store_true",
+                        help="Ignore a configured initial checkpoint (SAC only)")
     parser.add_argument("--curriculum", type=int, nargs="?", const=0, metavar="K",
                         help="Cycle z heights for PPO/SAC, starting at index K (default: 0)")
     parser.add_argument("--seed", type=int, help="Random seed; overrides the config")
@@ -383,6 +457,8 @@ def main():
     args = parser.parse_args()
     if args.curriculum is not None and args.policy == "dqn":
         parser.error("--curriculum supports PPO or SAC")
+    if args.from_scratch and args.policy != "sac":
+        parser.error("--from-scratch is only needed for SAC's configured starting policy")
     config_path = (args.config or CONFIG_DIR / f"{args.policy}.json").expanduser().resolve()
     try:
         config = json.loads(config_path.read_text())
@@ -418,7 +494,8 @@ def main():
         agent, checkpoint_path = train_ppo(rnn_model, ref_mission, training_dir, **training_args)
     else:
         agent, checkpoint_path = train_off_policy(
-            args.policy, rnn_model, ref_mission, training_dir, **training_args,
+            args.policy, rnn_model, ref_mission, training_dir,
+            from_scratch=args.from_scratch, **training_args,
         )
     print(f"Training completed in {time.perf_counter() - started:.1f} s; selected {checkpoint_path}", flush=True)
     env = DroneEnv(rnn_model=rnn_model, mission=ref_mission)
