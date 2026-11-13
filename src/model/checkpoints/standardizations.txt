@@ -3,5 +3,5 @@ az output mean -9.68746566772461 ; std 21.440523147583008
 voltage input mean -0.004098882433027029 ; input std 1.7267645597457886
 
 rnn_thrust_yaw :
-Inputs mean: tensor([-0.0205,  0.0014,  0.0000,  0.0000]), std: tensor([6.4559, 0.4590, 0.0000, 0.0000])
-Outputs mean: tensor([-9.9011,  0.0310]), std: tensor([20.6719, 10.7658])
+Inputs mean: tensor([-1.3672e-02,  0.0000e+00,  0.0000e+00,  9.1857e-05]), std: tensor([1.6101, 0.0000, 0.0000, 0.1147])
+Outputs mean: tensor([-10.0084,   0.0174]), std: tensor([20.6563, 10.8079])
