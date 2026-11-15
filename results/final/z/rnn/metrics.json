@@ -1,0 +1,15 @@
+{
+  "mode": "z",
+  "checkpoint": "/home/rayan768/CS/drone/EI-DATA-DRIVEN-CONTROL/src/model/checkpoints/rnn_z.pt",
+  "samples": 200,
+  "dt_s": 0.05,
+  "final_prediction": [
+    -6.908498715957819
+  ],
+  "mae": [
+    0.19632810691176103
+  ],
+  "rmse": [
+    0.35265642211621523
+  ]
+}

@@ -1,14 +1,20 @@
-from pathlib import Path
-from drone.visualization import initialize_visualizer, set_axes, creation_modele_drone, animate_episode, test_trajectory, test_trajectory2, simu_bdd, add_moving_grid
+"""Display a generated flight in Meshcat without loading a dataset."""
+
+from .animate_episode import animate_episode
+from .initialize_visualizer import add_moving_grid, initialize_visualizer, set_axes
+from .model_3D import creation_modele_drone
+from .test_trajectory import test_trajectory
+
+
+def main():
+    """Open the viewer and animate a climb, square flight, turn and descent."""
+    visualizer = initialize_visualizer()
+    set_axes(visualizer, length=5, radius=0.03)
+    add_moving_grid(visualizer)
+    creation_modele_drone(visualizer)
+    animate_episode(test_trajectory(), visualizer)
+    input("Press Enter to close the simulation. ")
+
 
 if __name__ == "__main__":
-    vis = initialize_visualizer()
-    set_axes(vis, 5, 0.03)
-    add_moving_grid(vis)
-    creation_modele_drone(vis)
-    #data = test_trajectory()
-    #data = test_trajectory2()
-    data = simu_bdd(4, str(Path(__file__).resolve().parents[3] / "data/initial_data/bdd_out_mat_05"), 1)#last argument = type of bdd -> 1 if returns a_z else 2
-    animate_episode(data, vis) 
-    
-    input("Stopper la simulation (appuyer sur entrer)")
+    main()

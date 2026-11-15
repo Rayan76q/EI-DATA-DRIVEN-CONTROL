@@ -1,0 +1,4 @@
+MATLAB policy check passed: 237 samples, 262 probes, max error 1.16e-07.
+MATLAB RNN check passed: 64 samples, max error 1.62e-05.
+MATLAB policy check passed: 237 samples, 262 probes, max error 1.16e-07.
+Simulink plant results saved to /home/rayan768/CS/drone/EI-DATA-DRIVEN-CONTROL/results/final/z_psi/plant (RMSE 0.577 m).

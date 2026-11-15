@@ -21,5 +21,6 @@
     "target_kl": null,
     "stats_window_size": 100,
     "policy_kwargs": null
-  }
+  },
+  "checkpoint": "results/final/z/policy.zip"
 }

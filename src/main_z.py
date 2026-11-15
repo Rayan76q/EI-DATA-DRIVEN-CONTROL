@@ -1,182 +1,132 @@
-"""Climb to 2 m, hover, then land."""
+"""Evaluate or train an altitude policy, then export and run it in Simulink."""
 
 import argparse
 from datetime import datetime
 import json
 from pathlib import Path
-import time
 
 import numpy as np
 import torch
 from stable_baselines3 import DQN, PPO, SAC
-from stable_baselines3.common.env_checker import check_env
 
 from model.rnn_loader import load_rnn_model
-from policy.lib.droneEnv import DroneEnv, Z_LAND
-from policy.lib.discrete_actions import DiscreteDroneActions
 from policy.evaluation import evaluate_policy, plot_learning_curve
 from policy.export_policy import export_for_matlab
+from policy.lib.discrete_actions import DiscreteDroneActions
+from policy.lib.droneEnv import DroneEnv, Z_LAND
 from policy.matlab import evaluate_export
 from policy.training import (
-    CONFIG_DIR, CurriculumCallback, configured_checkpoint,
-    ref_mission, train_off_policy, train_ppo,
+    CONFIG_DIR,
+    CurriculumCallback,
+    configured_checkpoint,
+    ref_mission,
+    train_off_policy,
+    train_ppo,
 )
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-RL_MODEL = "ppo"  # Select "ppo", "dqn" or "sac" for evaluation.
+ALGORITHMS = {"ppo": PPO, "dqn": DQN, "sac": SAC}
 
 
-def main():
+def parse_arguments(argv):
+    """Keep evaluation defaults in the same JSON files used for training."""
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--rl-model", "--algo", dest="algo", choices=("ppo", "dqn", "sac"),
-                        default=RL_MODEL, help="RL model to evaluate (default: RL_MODEL in main_z.py)")
-    policy_selection = parser.add_mutually_exclusive_group()
-    policy_selection.add_argument("--train", action="store_true", help="Train a new policy instead of loading a saved one")
-    policy_selection.add_argument("--policy", type=Path, help="Load a checkpoint for the selected algorithm to evaluate and export")
-    parser.add_argument("--rnn", type=Path,
-                        default=PROJECT_ROOT / "src" / "model" / "checkpoints" / "rnn_z.pt",
-                        help="Altitude dynamics checkpoint (default: model/checkpoints/rnn_z.pt)")
-    parser.add_argument("--config", type=Path, help="Training settings JSON (default: policy/config/<algo>.json)")
-    parser.add_argument("--steps", type=int, help="Training timesteps; overrides the config")
-    parser.add_argument("--from-scratch", action="store_true",
-                        help="With --train and SAC: ignore the configured starting policy")
-    parser.add_argument("--curriculum", type=int, nargs="?", const=0, metavar="K",
-                        help="With --train: cycle z heights, starting at index K (default: 0)")
-    parser.add_argument("--seed", type=int, help="Random seed; overrides the config")
-    parser.add_argument("--output-dir", type=Path, help="Directory for plots, metrics, trajectories and MATLAB export")
-    parser.add_argument("--show", action="store_true", help="Also display the saved plots")
-    parser.add_argument("--matlab", type=Path, help="MATLAB executable; also discovers ~/bin/matlab")
-    parser.add_argument("--skip-matlab", action="store_true", help="Evaluate and export Python only")
-    args = parser.parse_args()
+    parser.add_argument("--rl-model", choices=ALGORITHMS, default="ppo")
+    selection = parser.add_mutually_exclusive_group()
+    selection.add_argument("--train", action="store_true")
+    selection.add_argument("--policy", type=Path, help="Override the configured saved policy")
+    parser.add_argument("--rnn", type=Path, default=PROJECT_ROOT / "src/model/checkpoints/rnn_z.pt")
+    parser.add_argument("--config", type=Path)
+    parser.add_argument("--steps", type=int, help="Override the training budget")
+    parser.add_argument("--seed", type=int)
+    parser.add_argument(
+        "--from-scratch", action="store_true", help="Train SAC without its starting checkpoint",
+    )
+    parser.add_argument(
+        "--curriculum", type=int, metavar="K", help="Start PPO/SAC at curriculum height index K",
+    )
+    parser.add_argument("--output-dir", type=Path)
+    parser.add_argument("--show", action="store_true")
+    parser.add_argument("--matlab", type=Path, help="Override MATLAB executable discovery")
+    parser.add_argument("--skip-matlab", action="store_true")
+    args = parser.parse_args(argv)
+
     if args.steps is not None and args.steps <= 0:
         parser.error("--steps must be positive")
-    if args.from_scratch and (not args.train or args.algo != "sac"):
-        parser.error("--from-scratch requires --train with SAC")
-    if args.curriculum is not None and (not args.train or args.algo == "dqn"):
-        parser.error("--curriculum requires --train with PPO or SAC")
-    config_path = (args.config or CONFIG_DIR / f"{args.algo}.json").expanduser().resolve()
-    try:
-        config = json.loads(config_path.read_text())
-        if args.algo not in config:
-            parser.error(f"{config_path} has no '{args.algo}' training settings")
-        steps = args.steps if args.steps is not None else config["total_timesteps"]
-        seed = args.seed if args.seed is not None else config["seed"]
-    except (OSError, ValueError, KeyError) as error:
-        parser.error(str(error))
-    agent_class = {"ppo": PPO, "dqn": DQN, "sac": SAC}[args.algo]
-    if not args.train:
-        checkpoint_path = (
-            args.policy or configured_checkpoint(config)
-            or configured_checkpoint(config, "initial_checkpoint")
-        )
-        if checkpoint_path is None:
-            runs = sorted(
-                (PROJECT_ROOT / "results" / "altitude" / args.algo).glob(f"*/training/{args.algo}_config.json"),
-                key=lambda path: path.stat().st_mtime,
-                reverse=True,
-            )
-            for run_config_path in runs:
-                try:
-                    run_config = json.loads(run_config_path.read_text())
-                except (OSError, ValueError):
-                    continue
-                metadata = run_config.get("metadata") if isinstance(run_config, dict) else None
-                saved_checkpoint = metadata.get("checkpoint") if isinstance(metadata, dict) else None
-                if isinstance(saved_checkpoint, str):
-                    saved_path = Path(saved_checkpoint)
-                    # Team run snapshots can contain the original machine's absolute path.
-                    candidates = (saved_path, run_config_path.parent / saved_path.name)
-                    checkpoint_path = next((path for path in candidates if path.is_file()), None)
-                    if checkpoint_path is not None:
-                        break
-        checkpoint_path = (checkpoint_path or (
-            PROJECT_ROOT / "src" / "policy" / "checkpoints" / f"{args.algo}_drone_rnn.zip"
-        )).expanduser().resolve()
-        if not checkpoint_path.is_file() and Path(f"{checkpoint_path}.zip").is_file():
-            checkpoint_path = Path(f"{checkpoint_path}.zip")
-        if not checkpoint_path.is_file():
-            parser.error(f"Checkpoint not found: {checkpoint_path}. "
-                         f"Train it with python src/policy/training.py --policy {args.algo}, or use --policy PATH.")
+    if args.from_scratch and (not args.train or args.rl_model != "sac"):
+        parser.error("--from-scratch requires --train --rl-model sac")
+    if args.curriculum is not None and (not args.train or args.rl_model == "dqn"):
+        parser.error("--curriculum requires PPO or SAC training")
+    return args
+
+
+def train_agent(args, model, output_dir, config_path, seed):
+    """Train into a new run directory without replacing the selected reference policy."""
+    settings = dict(total_timesteps=args.steps, seed=seed, config_path=config_path)
+    if args.curriculum is not None:
+        settings["curriculum"] = CurriculumCallback(difficulty=args.curriculum, verbose=1)
+    if args.rl_model == "ppo":
+        return train_ppo(model, ref_mission, output_dir, **settings)
+    return train_off_policy(
+        args.rl_model, model, ref_mission, output_dir,
+        from_scratch=args.from_scratch, **settings,
+    )
+
+
+def main(argv=None):
+    """Run RNN evaluation, MATLAB export and optional physical-plant validation."""
+    args = parse_arguments(argv)
     if not args.show:
         import matplotlib
         matplotlib.use("Agg")
     torch.set_num_threads(1)
 
-    output_dir = args.output_dir or (
-        PROJECT_ROOT / "results" / "altitude" / args.algo / datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-    )
-    output_dir = output_dir.expanduser().resolve()
+    config_path = (args.config or CONFIG_DIR / f"{args.rl_model}.json").expanduser().resolve()
+    config = json.loads(config_path.read_text())
+    seed = config["seed"] if args.seed is None else args.seed
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    output_dir = (args.output_dir or PROJECT_ROOT / "results/runs/z" / args.rl_model / timestamp).resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
     rnn_path = args.rnn.expanduser().resolve()
-    rnn_model = load_rnn_model(rnn_path)
-    print(f"RNN: {rnn_path}")
-    print("Mission: 0 m until 2 s, 2 m until 6 s, then land at -0.3 m")
+    model = load_rnn_model(rnn_path)
 
-    env = DroneEnv(rnn_model=rnn_model, mission=ref_mission)
+    if args.train:
+        agent, checkpoint = train_agent(args, model, output_dir / "training", config_path, seed)
+        plot_learning_curve(output_dir / "training", output_dir / "learning_curve.png", show=args.show)
+    else:
+        checkpoint = args.policy or configured_checkpoint(config)
+        if checkpoint is None:
+            raise ValueError("Set checkpoint in the config or pass --policy PATH")
+        checkpoint = checkpoint.expanduser().resolve()
+        agent = ALGORITHMS[args.rl_model].load(checkpoint, device="cpu")
+
+    env = DroneEnv(rnn_model=model, mission=ref_mission)
+    if args.rl_model == "dqn":
+        commands = np.load(checkpoint.parent / "commands.npy", allow_pickle=False)
+        env = DiscreteDroneActions(env, commands)
+
     try:
-        check_env(env)
-        if args.train:
-            print(f"{args.algo.upper()} training: {steps:,} requested steps")
-            started = time.perf_counter()
-            training_args = dict(total_timesteps=steps, seed=seed, config_path=config_path)
-            if args.curriculum is not None:
-                training_args["curriculum"] = CurriculumCallback(difficulty=args.curriculum, verbose=1)
-            if args.algo == "ppo":
-                agent, checkpoint_path = train_ppo(
-                    rnn_model, ref_mission, output_dir / "training", **training_args,
-                )
-            else:
-                agent, checkpoint_path = train_off_policy(
-                    args.algo, rnn_model, ref_mission, output_dir / "training",
-                    from_scratch=args.from_scratch, **training_args,
-                )
-            print(f"Selected checkpoint: {agent.num_timesteps:,} steps; {time.perf_counter() - started:.1f} s")
-            print(f"TensorBoard: tensorboard --logdir {output_dir / 'training' / 'tensorboard'}")
-            plot_learning_curve(output_dir / "training", output_dir / "learning_curve.png", show=args.show)
-        else:
-            agent = agent_class.load(checkpoint_path, device="cpu")
-
-        if args.algo == "dqn":
-            commands_path = checkpoint_path.parent / "commands.npy"
-            if not commands_path.is_file():
-                raise FileNotFoundError(f"DQN needs its command grid beside the checkpoint: {commands_path}")
-            env = DiscreteDroneActions(env, np.load(commands_path, allow_pickle=False))
-
         if agent.observation_space != env.observation_space or agent.action_space != env.action_space:
-            raise ValueError("The selected policy does not match the altitude environment's observations/actions")
-        print(f"Policy: {checkpoint_path}")
+            raise ValueError("Policy observations/actions do not match the altitude environment")
         metrics = evaluate_policy(agent, env, output_dir, seed=seed, show=args.show)
-        metrics.update(
-            algorithm=args.algo.upper(),
-            rnn_path=str(rnn_path),
-            policy_path=str(checkpoint_path),
-            seed=seed,
-            Ts=float(env.unwrapped.p.dt),
-            policy_training_steps=int(agent.num_timesteps),
-            trained_this_run=args.train,
-            training_config_path=str(config_path) if args.train else None,
-            mission={
-                "initial_altitude_m": 0.0,
-                "hover_altitude_m": 2.0,
-                "climb_start_s": 2.0,
-                "landing_start_s": 6.0,
-                "landing_altitude_m": Z_LAND,
-            },
-        )
-        (output_dir / "metrics.json").write_text(json.dumps(metrics, indent=2) + "\n")
         export_for_matlab(agent, env, output_dir)
-        print(f"Result: {metrics['outcome']} at {metrics['duration_s']:.2f} s | "
-              f"peak {metrics['peak_altitude_m']:.3f} m | "
-              f"final vz {metrics['final_vertical_velocity_m_s']:.3f} m/s | "
-              f"return {metrics['return']:.1f}")
-        print(f"Results: {output_dir}")
-        metrics["simulink"] = ({"status": "skipped"} if args.skip_matlab else
-                               evaluate_export(output_dir, output_dir, executable=args.matlab))
-        print(f"MATLAB/Simulink: {metrics['simulink']['status']}")
+        metrics.update(
+            algorithm=args.rl_model.upper(), rnn_path=str(rnn_path),
+            policy_path=str(checkpoint), seed=seed, Ts=float(env.unwrapped.p.dt),
+            policy_training_steps=int(agent.num_timesteps), trained_this_run=args.train,
+            mission=dict(initial_altitude_m=0., hover_altitude_m=2., climb_start_s=2.,
+                         landing_start_s=6., landing_altitude_m=Z_LAND),
+        )
+        metrics["simulink"] = {"status": "skipped"}
+        if not args.skip_matlab:
+            metrics["simulink"] = evaluate_export(output_dir, output_dir, executable=args.matlab)
         (output_dir / "metrics.json").write_text(json.dumps(metrics, indent=2) + "\n")
+        print(f"Policy: {checkpoint}")
+        print(f"Result: {metrics['outcome']} at {metrics['duration_s']:.2f} s")
+        print(f"MATLAB/Simulink: {metrics['simulink']['status']}")
+        print(f"Results: {output_dir}")
         if metrics["simulink"]["status"] in {"failed", "mission_failed"}:
-            raise RuntimeError(f"Simulink failed; see {metrics['simulink']['log']}")
+            raise RuntimeError(f"Simulink validation failed; see {output_dir / 'matlab.log'}")
     finally:
         env.close()
 

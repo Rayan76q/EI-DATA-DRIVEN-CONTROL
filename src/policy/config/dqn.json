@@ -24,7 +24,11 @@
     "exploration_final_eps": 0.05,
     "max_grad_norm": 10.0,
     "policy_kwargs": {
-      "net_arch": [64, 64]
+      "net_arch": [
+        64,
+        64
+      ]
     }
-  }
+  },
+  "checkpoint": "results/altitude/dqn/20261106_restored_baseline/training/best_model.zip"
 }

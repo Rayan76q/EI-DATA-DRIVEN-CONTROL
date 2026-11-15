@@ -1,17 +1,18 @@
 function out = EINT_RL_eval(export_dir, noise_gain, results_dir, make_plots)
-%EINT_RL_EVAL Replay a Python export, then fly its policy on the Simulink plant.
+%EINT_RL_EVAL Validate a Python export and fly it on the Simulink plant.
 %   addpath('src/drone/closed_loop');
 %   out = EINT_RL_eval('results/altitude/ppo/my_run', 0.0);
-% The export folder must contain policy.mat and traj_model.mat from Python.
-% Plant logs and scope plots go to results/closed_loop/<algorithm>/<run>/.
-% Pass a third argument to choose a different plant-results folder.
+% The export contains policy.mat and traj_model.mat. Optional results_dir
+% selects the output folder; make_plots=false keeps only the numerical logs.
 if nargin < 1 || isempty(export_dir)
     error('Pass the export folder containing policy.mat and traj_model.mat.');
 end
 if nargin < 2
     noise_gain = 0.1;
 end
-if nargin < 4, make_plots = true; end
+if nargin < 4
+    make_plots = true;
+end
 validateattributes(noise_gain, {'numeric'}, {'scalar', 'real', 'finite', 'nonnegative'});
 [exists, export_info] = fileattrib(export_dir);
 if ~exists || ~export_info.directory
@@ -45,16 +46,21 @@ assert(exist('sim', 'file') > 0 && exist('load_system', 'file') > 0, ...
     'drone:SimulinkMissing', 'Install Simulink in this MATLAB installation before running the plant.');
 if nargin < 3 || isempty(results_dir)
     switch strtrim(P.output)
-        case 'discrete', algorithm = 'dqn';
-        case 'tanh_scale', algorithm = 'sac';
-        case 'scale', algorithm = 'td3';
-        otherwise, algorithm = 'ppo';
+        case 'discrete'
+            algorithm = 'dqn';
+        case 'tanh_scale'
+            algorithm = 'sac';
+        otherwise
+            algorithm = 'ppo';
     end
     [parent_dir, run_name] = fileparts(export_dir);
     if any(strcmp(run_name, {'training', 'matlab'}))
         [~, run_name] = fileparts(parent_dir);
     end
-    if rotation, folder = 'closed_loop_z_psi'; else, folder = 'closed_loop'; end
+    folder = 'closed_loop';
+    if rotation
+        folder = 'closed_loop_z_psi';
+    end
     results_dir = fullfile(project_root, 'results', folder, algorithm, run_name);
 end
 
@@ -64,7 +70,9 @@ T_end = double(P.horizon);
 g_noise = double(noise_gain);
 g = double(P.g);
 model_name = 'EINT_RL_closed_loop';
-if rotation, model_name = 'EINT_RL_closed_loop_2'; end
+if rotation
+    model_name = 'EINT_RL_closed_loop_2';
+end
 was_loaded = bdIsLoaded(model_name);
 load_system(fullfile(here, [model_name '.slx']));
 if ~was_loaded
@@ -115,17 +123,21 @@ clear rl_controller rl_controller2
 out = sim(sim_input);
 clear rl_controller rl_controller2
 clear restore_logging
-L = out.rl_log;                       % t, z, vz, az, u, z_ref
+
+L = out.rl_log;
 if isa(L, 'timeseries')
     L = L.Data;
 elseif isstruct(L)
     L = L.signals.values;
 end
-t = L(:, 1); z = L(:, 2);
+t = L(:, 1);
+z = L(:, 2);
 if rotation
-    u = L(:, 14:17); z_ref = L(:, 18);
+    u = L(:, 14:17);
+    z_ref = L(:, 18);
 else
-    u = L(:, 5); z_ref = L(:, 6);
+    u = L(:, 5);
+    z_ref = L(:, 6);
 end
 rmse = sqrt(mean((z_ref - z).^2));
 plant_logged = out.plant_log.getElement('plant_state');
@@ -148,9 +160,9 @@ control_state = interp1(sample_t, plant_state(sample_index, :), t, 'linear');
 if rotation
     psi_ref = interp1(P.mission_t(:), P.mission_psi_ref(:), t, 'previous', 'extrap');
     thrust = mean(u, 2);
-    yaw = (u(:,1)-u(:,2)+u(:,3)-u(:,4))/4;
+    yaw = (u(:, 1) - u(:, 2) + u(:, 3) - u(:, 4)) / 4;
     trajectory = array2table([t, control_state, u, thrust, yaw, z_ref, psi_ref], ...
-        'VariableNames', [{'t'}, state_names, {'u1','u2','u3','u4','thrust','yaw','z_ref','psi_ref'}]);
+        'VariableNames', [{'t'}, state_names, {'u1', 'u2', 'u3', 'u4', 'thrust', 'yaw', 'z_ref', 'psi_ref'}]);
 else
     trajectory = array2table([t, control_state, u, z_ref], ...
         'VariableNames', [{'t'}, state_names, {'u_base', 'z_ref'}]);

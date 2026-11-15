@@ -1,16 +1,19 @@
-"""Altitude and yaw control using rnn_model_thrust_speeds.
+"""Altitude and yaw control with a learned acceleration model.
 
 Actions [thrust, yaw] become RNN inputs [thrust, roll=0, pitch=0, yaw].
 The outputs [az, psi_ddot] are denormalized and integrated without extra physics.
 Observations are [z-z_ref, vz, az, psi-psi_ref, psi_dot, psi_ddot].
-The existing 18-state layout is kept for saved trajectories; other axes stay zero.
+State indices are z=0, vz=1, az=2, psi=11, wz=16, and wz_dot=17.
+The remaining entries in the plant's 18-state layout stay zero.
 """
 
 from types import SimpleNamespace
-import numpy as np
+
 import gymnasium as gym
 from gymnasium import spaces
+import numpy as np
 import torch
+
 from model.rnn_loader import checkpoint_parameters
 
 # Training statistics: inputs [thrust, roll, pitch, yaw], outputs [az, psi_ddot].
@@ -33,9 +36,6 @@ PARAMS = SimpleNamespace(
     sigma_wz_dot=SIGMA_WZ_DOT,
 )
 
-# Running rewards are rates per second; terminal rewards are fixed.
-
-
 # Landing and operational thresholds
 Z_LAND = -0.3          # Landing platform altitude along vertical axis (m)
 Z_MAX = 10.0           # Ceiling altitude limit (m)
@@ -50,23 +50,17 @@ def default_mission(t):
     """Climb to 2 m, turn once around z, then land holding the final yaw."""
     if t < 2.0:
         return (0.0, 0.0)
-    elif t < 5.0:
+    if t < 5.0:
         return (2.0, 0.0)
-    elif t < 8.0:
+    if t < 8.0:
         return (2.0, float(2 * np.pi * (t - 5.0) / 3.0))
-    else:
-        return (Z_LAND, float(2 * np.pi))
+    return (Z_LAND, float(2 * np.pi))
 
 
-
-# Backward-compatible import for notebooks using the original function name.
-mission = default_mission
-
-
-def dynamics(state, u, dt=0.05, rnn_model=None, hidden_state=None, p=PARAMS, integrate_z=False):
+def dynamics(state, u, dt=0.05, rnn_model=None, hidden_state=None, p=PARAMS):
     """Predict [az, psi_ddot] and integrate z and yaw; keep the other axes zero."""
     if rnn_model is None:
-        raise ValueError("dynamics requires an rnn_model. Fallback has been disabled.")
+        raise ValueError("Altitude/yaw dynamics requires a trained RNN")
 
     thrust, yaw = np.asarray(u, dtype=np.float32).reshape(2)
     rnn_input = np.array([thrust, 0.0, 0.0, yaw], dtype=np.float32)
@@ -79,7 +73,7 @@ def dynamics(state, u, dt=0.05, rnn_model=None, hidden_state=None, p=PARAMS, int
         prediction, next_hidden = rnn_model(u_tensor, hidden_state)
     pred = prediction.detach().cpu().numpy().reshape(-1)
     if pred.size != 2:
-        raise ValueError("Expected rnn_model_thrust_speeds outputs [az, psi_ddot]")
+        raise ValueError("Expected RNN outputs [az, psi_ddot]")
     az = float(pred[0]) * p.sigma_az + p.mean_az
     psi_ddot = float(pred[1]) * p.sigma_wz_dot + p.mean_wz_dot
 
@@ -93,6 +87,7 @@ def dynamics(state, u, dt=0.05, rnn_model=None, hidden_state=None, p=PARAMS, int
     return next_state, next_hidden
 
 
+# Running rewards are rates per second; terminal rewards are fixed.
 REWARD_PARAMS = SimpleNamespace(
     alive_bonus=2.0,
     z_bonus=4.0,
@@ -108,15 +103,16 @@ REWARD_PARAMS = SimpleNamespace(
 )
 
 
-def compute_reward(old_state, state, u, outcome, target_ref=(0.0, 0.0), u_prev=None, dt=PARAMS.dt):
+def compute_reward(state, u, outcome, target_ref=(0.0, 0.0), u_prev=None, dt=PARAMS.dt):
     """Reward tracking and survival over dt, with separate terminal rewards."""
-    hubber_loss = lambda x, delta=1.0: 0.5 * x**2 if abs(x) <= delta else delta * (abs(x) - 0.5 * delta)
+    def huber_loss(error, delta=1.0):
+        if abs(error) <= delta:
+            return 0.5 * error**2
+        return delta * (abs(error) - 0.5 * delta)
+
     r = REWARD_PARAMS
 
-    if isinstance(outcome, tuple):
-        z_status, psi_status = outcome
-    else:
-        z_status, psi_status = outcome, "has_turned"
+    z_status, psi_status = outcome
 
     if z_status == "landed":
         return r.success if psi_status == "has_turned" else -abs(r.failure)
@@ -130,51 +126,38 @@ def compute_reward(old_state, state, u, outcome, target_ref=(0.0, 0.0), u_prev=N
     wz = state[16]
 
     # Positive tracking bonuses, with smaller penalties away from the targets.
-    r_z = r.z_bonus / (1.0 + (z - z_ref)**2) - r.z_penalty * hubber_loss(z - z_ref)
+    r_z = r.z_bonus / (1.0 + (z - z_ref)**2) - r.z_penalty * huber_loss(z - z_ref)
 
     # Same bonus for unwrapped yaw, keeping 0 and a complete turn distinct.
-    r_psi = r.psi_bonus / (1.0 + (psi - psi_ref)**2) - r.psi_penalty * hubber_loss(psi - psi_ref)
+    r_psi = r.psi_bonus / (1.0 + (psi - psi_ref)**2) - r.psi_penalty * huber_loss(psi - psi_ref)
 
-    # Velocity penalties
-    r_vel = -r.vz_penalty * hubber_loss(vz) - r.wz_penalty * hubber_loss(wz)
+    r_vel = -r.vz_penalty * huber_loss(vz) - r.wz_penalty * huber_loss(wz)
 
-    # Penalize yaw effort.
     u_arr = np.asarray(u, dtype=np.float32).reshape(-1)
-
-    # The second element is the direct yaw input.
     r_act = -r.yaw_effort * float(u_arr[1] ** 2)
 
-    # Smoothness penalty
     if u_prev is not None:
         u_prev_arr = np.asarray(u_prev, dtype=np.float32)
         r_smooth = -r.smoothness * float(np.sum(np.abs(u_arr - u_prev_arr)))
     else:
         r_smooth = 0.0
 
-
     return float(dt * (r.alive_bonus + r_z + r_psi + r_vel + r_act + r_smooth))
 
 
 class DroneEnv(gym.Env):
     """Gymnasium environment for altitude, yaw rotation, and landing."""
+
     metadata = {"render_modes": []}
 
-    out = SimpleNamespace(
-        flying="flying",
-        landed="landed",
-        crashed="crashed",
-        lost="lost",
-        timeout="timeout",
-        has_turned="has_turned",
-        no_turn="no_turn"
-    )
-
-    def __init__(self, rnn_model=None, params=PARAMS, max_steps=MAX_STEPS, integrate_z=False, mission=None):
+    def __init__(
+        self, rnn_model=None, params=PARAMS, max_steps=MAX_STEPS, mission=None,
+    ):
+        """Use a learned acceleration model and an unwrapped yaw reference."""
         super().__init__()
         self.p = checkpoint_parameters(rnn_model, params, "z_psi") if params is PARAMS else params
         self.max_steps = max_steps
         self.rnn_model = rnn_model
-        self.integrate_z = integrate_z
         self.mission = mission if mission is not None else default_mission
         if not callable(self.mission):
             raise TypeError("mission must be callable: mission(t) -> (z_ref, psi_ref)")
@@ -191,10 +174,8 @@ class DroneEnv(gym.Env):
         self.steps = 0
         self.t = 0.0
         self.u_prev = np.zeros(2, dtype=np.float32)
-        self.az_prev = -self.p.g
         self.has_turned = False
         self.altitude_hold_time = 0.0
-        self.out = self.__class__.out
 
     def _obs(self):
         """Return the altitude and yaw tracking observation."""
@@ -218,20 +199,20 @@ class DroneEnv(gym.Env):
         _, psi_goal = self.mission(self.max_steps * self.p.dt)
         # Unwrapped error supports positive/negative turns and climb-only missions.
         self.has_turned = bool(abs(psi - psi_goal) <= np.deg2rad(10.0))
-        psi_status = self.out.has_turned if self.has_turned else self.out.no_turn
+        psi_status = "has_turned" if self.has_turned else "no_turn"
         if z <= Z_LAND:
             soft = abs(vz) <= SAFE_VZ
             settled = abs(self.state[16]) <= SAFE_ANGULAR_SPEED
             landing_phase = (z_ref == Z_LAND)
-            z_status = self.out.landed if soft and settled and landing_phase else self.out.crashed
-            if z_status == self.out.landed and self.altitude_hold_time < ALTITUDE_HOLD_TIME:
+            z_status = "landed" if soft and settled and landing_phase else "crashed"
+            if z_status == "landed" and self.altitude_hold_time < ALTITUDE_HOLD_TIME:
                 z_status = "missed_altitude"
         elif z > Z_MAX:
-            z_status = self.out.lost
+            z_status = "lost"
         elif self.steps >= self.max_steps:
-            z_status = self.out.timeout
+            z_status = "timeout"
         else:
-            z_status = self.out.flying
+            z_status = "flying"
         return z_status, psi_status
 
     def reset(self, seed=None, options=None, new_mission=None):
@@ -251,34 +232,18 @@ class DroneEnv(gym.Env):
         self.steps = 0
         self.t = 0.0
         self.u_prev = np.zeros(2, dtype=np.float32)
-        self.az_prev = self.state[2]
         self.has_turned = False
 
         requires_climb = any(self.mission(i * self.p.dt)[0] > 0.0
                              for i in range(self.max_steps + 1))
         self.altitude_hold_time = 0.0 if requires_climb else ALTITUDE_HOLD_TIME
 
-        z_ref, psi_ref = self.mission(self.t)
-        info = {
-            "outcome": self.outcome(),
-            "m": {
-                "t": self.t,
-                "z": float(self.state[0]),
-                "vz": float(self.state[1]),
-                "az_prev": float(self.az_prev),
-                "z_ref": float(z_ref),
-                "psi_ref": float(psi_ref),
-                "u_prev": float(self.u_prev[0]),
-                "psi": float(self.state[11]),
-            }
-        }
+        info = {"outcome": self.outcome()}
         return self._obs(), info
 
     def step(self, action):
-        """Performs one environment step under control input u."""
+        """Advance the learned model and score altitude and yaw tracking."""
         u = np.clip(np.asarray(action, dtype=np.float32).reshape(-1), -3.0, 3.0)
-        if len(u) < 2:
-            u = np.pad(u, (0, 2 - len(u)), mode='constant')
         old = self.state
 
         self.state, self.hidden_state = dynamics(
@@ -288,7 +253,6 @@ class DroneEnv(gym.Env):
             rnn_model=self.rnn_model,
             hidden_state=self.hidden_state,
             p=self.p,
-            integrate_z=self.integrate_z
         )
 
         self.steps += 1
@@ -299,66 +263,19 @@ class DroneEnv(gym.Env):
         status = self.outcome()
 
         target_ref = self.mission(self.t)
-        reward = compute_reward(old, self.state, u, status, target_ref=target_ref, u_prev=self.u_prev, dt=self.p.dt)
-        z_ref, psi_ref = target_ref
+        reward = compute_reward(
+            self.state, u, status, target_ref=target_ref,
+            u_prev=self.u_prev, dt=self.p.dt,
+        )
 
-        terminated = (status[0] != self.out.flying)
+        terminated = status[0] != "flying"
         truncated = False  # The mission deadline is a terminal failure, not a rollout cutoff.
 
         info = {
             "outcome": status,
-            "is_success": status == (self.out.landed, self.out.has_turned),
+            "is_success": status == ("landed", "has_turned"),
             "altitude_hold_time": self.altitude_hold_time,
-            "m": {
-                "t": self.t,
-                "z": float(self.state[0]),
-                "vz": float(self.state[1]),
-                "az_prev": float(self.az_prev),
-                "z_ref": float(z_ref),
-                "psi_ref": float(psi_ref),
-                "u_prev": float(self.u_prev[0]),
-                "psi": float(self.state[11]),
-            }
         }
-
-        self.az_prev = float(self.state[2])
         self.u_prev = u.copy()
 
         return self._obs(), float(reward), terminated, truncated, info
-
-
-# ── Testing and Evaluation Helpers ──────────────────────────────────────────
-
-def run_episode(env, policy, seed=None, max_steps=None):
-    """Return states, actions, return, and outcome for policy(obs) -> action.
-
-    The active mission is available as env.unwrapped.mission, including when
-    env is wrapped. By default, use the environment's own episode horizon.
-    """
-    obs, info = env.reset(seed=seed)
-    base = env.unwrapped
-    states, actions, total_reward = [base.state.copy()], [], 0.0
-
-    for _ in range(base.max_steps if max_steps is None else max_steps):
-        a = policy(obs)
-        obs, r, terminated, truncated, info = env.step(a)
-        states.append(base.state.copy())
-        actions.append(a)
-        total_reward += r
-        if terminated or truncated:
-            break
-
-    return np.array(states), actions, total_reward, info["outcome"]
-
-
-def evaluate(env, policy, n=50, seed=0):
-    """Evaluates mean return and landing success rate over n episodes."""
-    returns, landed = [], 0
-    for i in range(n):
-        _, _, total, outcome = run_episode(env, policy, seed=seed + i)
-        returns.append(total)
-        is_landed = (outcome == ("landed", "has_turned") if isinstance(outcome, tuple) else outcome == "landed")
-        landed += int(is_landed)
-    returns = np.array(returns)
-    print(f"mean return: {returns.mean():7.1f} ± {returns.std():5.1f} | landed: {landed}/{n}")
-    return returns.mean(), landed / n

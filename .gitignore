@@ -1,7 +1,8 @@
 # Local datasets and generated results; MATLAB source and Simulink models are versioned.
 *.csv
-/src/policy/logs/
-/src/policy/export_logs/
+/results/*
+!/results/final/
+!/results/final/**/*.csv
 
 # Python/Jupyter runtime files.
 __pycache__/
@@ -18,3 +19,7 @@ simulink_cache/
 simulink_codegen/
 matlab_preferences/
 
+
+# MATLAB exports and runtime files belong under results, outside source.
+/src/**/*.mat
+/src/**/*.onnx

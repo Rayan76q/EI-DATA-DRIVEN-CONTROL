@@ -1,0 +1,57 @@
+{
+  "outcome": [
+    "landed",
+    "has_turned"
+  ],
+  "success": true,
+  "return": 195.9661935083568,
+  "steps": 237,
+  "duration_s": 11.850000000000001,
+  "altitude_mae_m": 0.4705934618973027,
+  "yaw_mae_rad": 0.2808914895643047,
+  "peak_altitude_m": 1.9009003639221191,
+  "altitude_hold_time_s": 2.849999999999998,
+  "minimum_altitude_m": -0.301291286945343,
+  "final_altitude_m": -0.301291286945343,
+  "final_vz_m_s": -0.07085467129945755,
+  "final_yaw_rad": 6.259291648864746,
+  "final_yaw_speed_rad_s": 0.008557000197470188,
+  "algorithm": "PPO",
+  "rnn_path": "/home/rayan768/CS/drone/EI-DATA-DRIVEN-CONTROL/src/model/checkpoints/rnn_z_psi.pt",
+  "policy_path": "/home/rayan768/CS/drone/EI-DATA-DRIVEN-CONTROL/results/final/z_psi/policy.zip",
+  "seed": 1,
+  "policy_training_steps": 266240,
+  "dynamics_sha256": "b60c4e2b47d3413e34cdf3e2ddc0669795a8274e59a553153f135b4276c5c3e1",
+  "simulink": {
+    "status": "completed",
+    "policy": {
+      "status": "passed",
+      "samples": 237,
+      "independent_probes": 262,
+      "max_action_error": 1.155016211562554e-07
+    },
+    "rnn": {
+      "status": "passed",
+      "samples": 64,
+      "max_prediction_error": 1.62362576e-05
+    },
+    "returncode": 0,
+    "log": "/home/rayan768/CS/drone/EI-DATA-DRIVEN-CONTROL/results/final/z_psi/matlab.log",
+    "executable": "/home/rayan768/bin/matlab",
+    "plant": {
+      "success": true,
+      "peak_altitude_m": 1.90428129865292,
+      "altitude_mae_m": 0.3034214933370355,
+      "sample_period_s": 0.050000000000000044,
+      "touchdown": {
+        "time_s": 11.75,
+        "z_m": -0.301247423622388,
+        "vz_m_s": -0.0740301550412533,
+        "altitude_hold_time_s": 2.9000000000000026,
+        "psi_rad": 6.25886622784395,
+        "yaw_error_rad": -0.024319079335639593,
+        "yaw_rate_rad_s": 0.00893258621709185
+      }
+    }
+  }
+}

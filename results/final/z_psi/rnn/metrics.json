@@ -1,0 +1,18 @@
+{
+  "mode": "z_psi",
+  "checkpoint": "/home/rayan768/CS/drone/EI-DATA-DRIVEN-CONTROL/src/model/checkpoints/rnn_z_psi.pt",
+  "samples": 161,
+  "dt_s": 0.05,
+  "final_prediction": [
+    10.779915413713455,
+    -7.880747617477178
+  ],
+  "mae": [
+    2.136706134348551,
+    0.04593692157160276
+  ],
+  "rmse": [
+    2.54826496743556,
+    0.07409409107740703
+  ]
+}

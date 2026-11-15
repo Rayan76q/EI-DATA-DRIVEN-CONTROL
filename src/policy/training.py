@@ -1,18 +1,13 @@
 """Policy training with saved settings, checkpoints and TensorBoard logs."""
 
-import json
 import hashlib
+import json
 from collections import deque
 from pathlib import Path
 
-if __package__ in {None, ""}:
-    import sys
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-    __package__ = "policy"
-
+import gymnasium as gym
 import numpy as np
 import torch
-import gymnasium as gym
 from stable_baselines3 import DQN, PPO, SAC, __version__ as sb3_version
 from stable_baselines3.common.callbacks import BaseCallback, EvalCallback
 from stable_baselines3.common.env_util import make_vec_env
@@ -24,7 +19,7 @@ from .lib.droneEnv import CURRICULUM_HEIGHTS, DroneEnv, Z_LAND
 
 CONFIG_DIR = Path(__file__).resolve().parent / "config"
 DEFAULT_CONFIG = CONFIG_DIR / "ppo.json"
-POLICY = "ppo"
+EVAL_TRANSITIONS = 20_480  # Total transitions across all vector environments.
 
 
 class ScaledControlActions(gym.ActionWrapper):
@@ -38,21 +33,26 @@ class ScaledControlActions(gym.ActionWrapper):
             raise ValueError("action_scale and action_offset must match the action shape")
         if not np.all(self.scale > 0):
             raise ValueError("action_scale must be positive")
-        if np.any(self.offset - self.scale < env.action_space.low) or np.any(self.offset + self.scale > env.action_space.high):
+        if (
+            np.any(self.offset - self.scale < env.action_space.low)
+            or np.any(self.offset + self.scale > env.action_space.high)
+        ):
             raise ValueError("Scaled action range must fit within the raw environment bounds")
         self.action_space = gym.spaces.Box(-1.0, 1.0, shape=self.scale.shape, dtype=np.float32)
 
     def action(self, action):
-        return np.clip(self.offset + self.scale * np.asarray(action, dtype=np.float32),
-                       self.env.action_space.low, self.env.action_space.high)
+        """Convert a normalized policy action into bounded physical commands."""
+        command = self.offset + self.scale * np.asarray(action, dtype=np.float32)
+        return np.clip(command, self.env.action_space.low, self.env.action_space.high)
 
 
 def raw_action(agent, action):
     """Convert a saved PPO action to the raw environment's thrust/yaw units."""
     if getattr(agent, "action_scale", None) is None:
         return action
-    return (np.asarray(agent.action_offset, dtype=np.float32)
-            + np.asarray(agent.action_scale, dtype=np.float32) * np.asarray(action, dtype=np.float32))
+    offset = np.asarray(agent.action_offset, dtype=np.float32)
+    scale = np.asarray(agent.action_scale, dtype=np.float32)
+    return offset + scale * np.asarray(action, dtype=np.float32)
 
 
 class ScaledObservation(BaseFeaturesExtractor):
@@ -65,6 +65,7 @@ class ScaledObservation(BaseFeaturesExtractor):
             raise ValueError("observation_scale must contain one positive value per observation")
 
     def forward(self, observations):
+        """Apply the fixed divisor saved with the checkpoint."""
         return observations / self.scale
 
 
@@ -86,6 +87,7 @@ class SuccessEvalCallback(EvalCallback):
         return keep_training
 
     def evaluate_now(self):
+        """Evaluate without changing the normal evaluation schedule."""
         frequency = self.eval_freq
         self.eval_freq = 1
         try:
@@ -129,10 +131,10 @@ class _WarmStartEvalCallback(EvalCallback):
 
 
 class CurriculumCallback(BaseCallback):
-    """Cycle z heights after 85% success over 20 completed episodes.
+    """Advance after the configured success rate over a full episode window.
 
-    ``difficulty`` is the starting index k in [0.5, 1, 2, 5, 10]. Environments
-    apply changes at reset. Success means reaching the target, then landing softly.
+    ``difficulty`` indexes CURRICULUM_HEIGHTS. Environments apply changes
+    at reset. Success means reaching the target, then landing softly.
     For direct SB3 use, initialize DroneEnv(difficulty=callback.difficulty).
     """
 
@@ -178,12 +180,44 @@ class CurriculumCallback(BaseCallback):
 
 def ref_mission(t):
     """Hold at 0 m until 2 s, hover at 2 m until 6 s, then land."""
-    return 0.0 if t < 2.0 else (2.0 if t < 6.0 else Z_LAND)
+    if t < 2.0:
+        return 0.0
+    if t < 6.0:
+        return 2.0
+    return Z_LAND
 
 
 def load_ppo_config(path=DEFAULT_CONFIG):
     """Load training settings from a source config or a saved run config."""
     return json.loads(Path(path).expanduser().read_text())
+
+
+def _select_checkpoint(output_dir, final_path, callback, *, curriculum, by_success=False):
+    """Prefer a successful mission, then reward, unless using a curriculum."""
+    success_path = output_dir / "best_success.zip"
+    if by_success and success_path.is_file():
+        return success_path
+    best_path = output_dir / "best_model.zip"
+    if (
+        curriculum is None
+        and best_path.is_file()
+        and callback.best_mean_reward > -float("inf")
+    ):
+        return best_path
+    return final_path
+
+
+def _export_checkpoint(agent, env, output_dir):
+    """Save MATLAB artifacts and return their paths for the run snapshot."""
+    try:
+        policy_path, trajectory_path = export_for_matlab(agent, env, output_dir)
+        return {
+            "status": "exported",
+            "policy": str(policy_path.resolve()),
+            "trajectory": str(trajectory_path.resolve()),
+        }
+    finally:
+        env.close()
 
 
 def train_ppo(
@@ -270,11 +304,15 @@ def train_ppo(
             "window_size": curriculum.successes.maxlen,
         }
     config_snapshot.write_text(json.dumps(resolved_config, indent=2) + "\n")
+
     def make_training_env(training=False):
-        env = env_class(rnn_model=rnn_model, mission=mission, **(
-            {"difficulty": curriculum.difficulty} if training and curriculum is not None else {}
-        ))
-        return ScaledControlActions(env, action_scale, action_offset) if action_scale is not None else env
+        env_kwargs = {}
+        if training and curriculum is not None:
+            env_kwargs["difficulty"] = curriculum.difficulty
+        env = env_class(rnn_model=rnn_model, mission=mission, **env_kwargs)
+        if action_scale is None:
+            return env
+        return ScaledControlActions(env, action_scale, action_offset)
 
     train_env = make_vec_env(
         lambda: make_training_env(training=True),
@@ -328,17 +366,21 @@ def train_ppo(
                 agent.policy.log_std.copy_(torch.tensor(initial_log_std, dtype=torch.float32))
 
         if initial_checkpoint is not None:
-            if getattr(agent, "action_scale", None) != action_scale or getattr(agent, "action_offset", None) != action_offset:
+            if (
+                getattr(agent, "action_scale", None) != action_scale
+                or getattr(agent, "action_offset", None) != action_offset
+            ):
                 raise ValueError("Resumed PPO must use the same action scaling as this config")
             previous_dynamics = getattr(agent, "dynamics_sha256", None)
-            if previous_dynamics is not None and previous_dynamics != resolved_config["metadata"]["dynamics_sha256"]:
+            current_dynamics = resolved_config["metadata"]["dynamics_sha256"]
+            if previous_dynamics is not None and previous_dynamics != current_dynamics:
                 raise ValueError("Resumed PPO used different RNN weights or normalization")
             saved_scale = getattr(agent.policy.features_extractor, "scale", None)
-            if ((saved_scale is None) != (observation_scale is None) or (
-                observation_scale is not None and not np.allclose(
-                    saved_scale.detach().cpu().numpy(), observation_scale
-                )
-            )):
+            if (saved_scale is None) != (observation_scale is None):
+                raise ValueError("Resumed PPO must use the same observation scaling as this config")
+            if observation_scale is not None and not np.allclose(
+                saved_scale.detach().cpu().numpy(), observation_scale,
+            ):
                 raise ValueError("Resumed PPO must use the same observation scaling as this config")
         agent.action_scale, agent.action_offset = action_scale, action_offset
         if config.get("select_by_success"):
@@ -349,7 +391,7 @@ def train_ppo(
             eval_env,
             best_model_save_path=str(output_dir),
             log_path=str(output_dir),
-            eval_freq=max(1, 20_480 // n_envs),
+            eval_freq=max(1, EVAL_TRANSITIONS // n_envs),
             n_eval_episodes=1,
             deterministic=True,
             verbose=0,
@@ -373,39 +415,23 @@ def train_ppo(
         agent.logger.close()
         final_path = output_dir / "ppo_drone_rnn.zip"
         agent.save(final_path)
-        best_path = output_dir / "best_model.zip"
-        success_path = output_dir / "best_success.zip"
-        # Fixed 2 m evaluation cannot select progress across curriculum heights.
-        checkpoint_path = success_path if config.get("select_by_success") and success_path.is_file() else (
-            best_path if curriculum is None and best_path.is_file()
-            and callback.best_mean_reward > float("-inf") else final_path
+        # A fixed-height evaluation cannot select curriculum progress.
+        checkpoint_path = _select_checkpoint(
+            output_dir, final_path, callback, curriculum=curriculum,
+            by_success=config.get("select_by_success", False),
         )
         resolved_config["metadata"].update(
             actual_timesteps=agent.num_timesteps,
             checkpoint=str(checkpoint_path.resolve()),
         )
+        resolved_config["checkpoint"] = str(checkpoint_path.resolve())
         selected_agent = PPO.load(checkpoint_path, device="cpu")
         if config.get("select_by_success"):
             selected_agent.dynamics_sha256 = resolved_config["metadata"]["dynamics_sha256"]
             selected_agent.save(checkpoint_path)
-        export_env = make_training_env()
-        try:
-            if (export_env.observation_space.shape, export_env.unwrapped.action_space.shape) in {
-                ((3,), (1,)), ((6,), (2,)),
-            }:
-                policy_path, trajectory_path = export_for_matlab(selected_agent, export_env, output_dir)
-                resolved_config["metadata"]["matlab_export"] = {
-                    "status": "exported", "policy": str(policy_path.resolve()),
-                    "trajectory": str(trajectory_path.resolve()),
-                }
-            else:
-                resolved_config["metadata"]["matlab_export"] = {
-                    "status": "unsupported_environment",
-                    "reason": "MATLAB export supports altitude (3/1) and altitude/yaw (6/2)",
-                }
-                print("MATLAB export skipped: unsupported observation/action signature")
-        finally:
-            export_env.close()
+        resolved_config["metadata"]["matlab_export"] = _export_checkpoint(
+            selected_agent, make_training_env(), output_dir,
+        )
         config_snapshot.write_text(json.dumps(resolved_config, indent=2) + "\n")
         return selected_agent, checkpoint_path
     finally:
@@ -459,7 +485,7 @@ def train_off_policy(
             raise ValueError("initial_checkpoint is supported for SAC only")
         if not initial_checkpoint.is_file():
             raise FileNotFoundError(f"Starting checkpoint not found: {initial_checkpoint}")
-    eval_freq = config.get("eval_freq", 20_480)
+    eval_freq = config.get("eval_freq", EVAL_TRANSITIONS)
     if total_timesteps <= 0:
         raise ValueError("total_timesteps must be positive")
     if n_envs <= 0:
@@ -483,10 +509,13 @@ def train_off_policy(
         np.save(output_dir / "commands.npy", commands)
 
     def make_env(training=False):
-        env = env_class(rnn_model=rnn_model, mission=mission, **(
-            {"difficulty": curriculum.difficulty} if training and curriculum is not None else {}
-        ))
-        return env if commands is None else DiscreteDroneActions(env, commands)
+        env_kwargs = {}
+        if training and curriculum is not None:
+            env_kwargs["difficulty"] = curriculum.difficulty
+        env = env_class(rnn_model=rnn_model, mission=mission, **env_kwargs)
+        if commands is None:
+            return env
+        return DiscreteDroneActions(env, commands)
 
     resolved_config = {
         "total_timesteps": total_timesteps,
@@ -571,11 +600,8 @@ def train_off_policy(
         agent.logger.dump(step=agent.num_timesteps)
         final_path = output_dir / f"{algorithm}_drone_rnn.zip"
         agent.save(final_path)
-        best_path = output_dir / "best_model.zip"
-        # Keep the policy trained through all stages when using a curriculum.
-        checkpoint_path = (
-            best_path if curriculum is None and best_path.is_file()
-            and callback.best_mean_reward > float("-inf") else final_path
+        checkpoint_path = _select_checkpoint(
+            output_dir, final_path, callback, curriculum=curriculum,
         )
         resolved_config["metadata"].update(
             actual_timesteps=agent.num_timesteps,
@@ -586,22 +612,9 @@ def train_off_policy(
         if initial_checkpoint is not None:
             resolved_config["metadata"]["warm_start"]["initial_eval_return"] = callback.initial_mean_reward
         selected_agent = agent_class.load(checkpoint_path, device="cpu")
-        export_env = make_env()
-        try:
-            if export_env.observation_space.shape == (3,) and export_env.unwrapped.action_space.shape == (1,):
-                policy_path, trajectory_path = export_for_matlab(selected_agent, export_env, output_dir)
-                resolved_config["metadata"]["matlab_export"] = {
-                    "status": "exported", "policy": str(policy_path.resolve()),
-                    "trajectory": str(trajectory_path.resolve()),
-                }
-            else:
-                resolved_config["metadata"]["matlab_export"] = {
-                    "status": "unsupported_environment",
-                    "reason": "MATLAB export requires 3 altitude observations and 1 action",
-                }
-                print("MATLAB export skipped: only the altitude environment is supported")
-        finally:
-            export_env.close()
+        resolved_config["metadata"]["matlab_export"] = _export_checkpoint(
+            selected_agent, make_env(), output_dir,
+        )
         config_snapshot.write_text(json.dumps(resolved_config, indent=2) + "\n")
         return selected_agent, checkpoint_path
     finally:
@@ -609,109 +622,3 @@ def train_off_policy(
             agent.logger.close()
         train_env.close()
         eval_env.close()
-
-
-def main():
-    """Train the selected policy and evaluate it on the altitude mission."""
-    import argparse
-    from datetime import datetime
-    import time
-
-    from model.rnn_loader import load_rnn_model
-    from .evaluation import evaluate_policy, plot_learning_curve
-
-    project_root = Path(__file__).resolve().parents[2]
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--policy", "--algo", choices=("ppo", "dqn", "sac"), default=POLICY,
-                        help=f"Policy algorithm to train (default: {POLICY})")
-    parser.add_argument("--rnn", type=Path,
-                        default=project_root / "src" / "model" / "checkpoints" / "rnn_z.pt",
-                        help="Altitude dynamics checkpoint")
-    parser.add_argument("--config", type=Path, help="Training settings JSON (default: policy/config/<policy>.json)")
-    parser.add_argument("--steps", type=int, help="Training timesteps; overrides the config")
-    parser.add_argument("--from-scratch", action="store_true",
-                        help="Ignore a configured initial checkpoint (SAC only)")
-    parser.add_argument("--curriculum", type=int, nargs="?", const=0, metavar="K",
-                        help="Cycle z heights for PPO/SAC, starting at index K (default: 0)")
-    parser.add_argument("--seed", type=int, help="Random seed; overrides the config")
-    parser.add_argument("--output-dir", type=Path, help="Directory for the training run and results")
-    parser.add_argument("--show", action="store_true", help="Also display the saved plots")
-    args = parser.parse_args()
-    if args.curriculum is not None and args.policy == "dqn":
-        parser.error("--curriculum supports PPO or SAC")
-    if args.from_scratch and args.policy != "sac":
-        parser.error("--from-scratch is only needed for SAC's configured starting policy")
-    config_path = (args.config or CONFIG_DIR / f"{args.policy}.json").expanduser().resolve()
-    try:
-        config = json.loads(config_path.read_text())
-        if args.policy not in config:
-            parser.error(f"{config_path} has no '{args.policy}' training settings")
-        steps = config["total_timesteps"] if args.steps is None else args.steps
-        seed = config["seed"] if args.seed is None else args.seed
-        if steps <= 0:
-            parser.error("Training timesteps must be positive")
-    except (OSError, ValueError, KeyError) as error:
-        parser.error(str(error))
-    if not args.show:
-        import matplotlib
-        matplotlib.use("Agg")
-    torch.set_num_threads(1)
-
-    output_dir = args.output_dir or (
-        project_root / "results" / "altitude" / args.policy / datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-    )
-    output_dir = output_dir.expanduser().resolve()
-    output_dir.mkdir(parents=True, exist_ok=True)
-    training_dir = output_dir / "training"
-    rnn_path = args.rnn.expanduser().resolve()
-    rnn_model = load_rnn_model(rnn_path)
-    print(f"RNN: {rnn_path}", flush=True)
-    print("Mission: 0 m until 2 s, 2 m until 6 s, then land at -0.3 m", flush=True)
-    print(f"{args.policy.upper()} training: {steps:,} requested steps", flush=True)
-    started = time.perf_counter()
-    training_args = dict(total_timesteps=steps, seed=seed, config_path=config_path)
-    if args.curriculum is not None:
-        training_args["curriculum"] = CurriculumCallback(difficulty=args.curriculum, verbose=1)
-    if args.policy == "ppo":
-        agent, checkpoint_path = train_ppo(rnn_model, ref_mission, training_dir, **training_args)
-    else:
-        agent, checkpoint_path = train_off_policy(
-            args.policy, rnn_model, ref_mission, training_dir,
-            from_scratch=args.from_scratch, **training_args,
-        )
-    print(f"Training completed in {time.perf_counter() - started:.1f} s; selected {checkpoint_path}", flush=True)
-    env = DroneEnv(rnn_model=rnn_model, mission=ref_mission)
-    try:
-        if args.policy == "dqn":
-            from .lib.discrete_actions import DiscreteDroneActions
-            env = DiscreteDroneActions(env, np.load(training_dir / "commands.npy", allow_pickle=False))
-        metrics = evaluate_policy(agent, env, output_dir, seed=seed, show=args.show)
-        metrics.update(
-            algorithm=args.policy.upper(), rnn_path=str(rnn_path), policy_path=str(checkpoint_path),
-            seed=seed, Ts=float(env.unwrapped.p.dt), policy_training_steps=int(agent.num_timesteps),
-            trained_this_run=True, training_config_path=str(config_path),
-            mission={"initial_altitude_m": 0.0, "hover_altitude_m": 2.0, "climb_start_s": 2.0,
-                     "landing_start_s": 6.0, "landing_altitude_m": Z_LAND},
-        )
-        (output_dir / "metrics.json").write_text(json.dumps(metrics, indent=2) + "\n")
-        snapshot_path = training_dir / f"{args.policy}_config.json"
-        snapshot = json.loads(snapshot_path.read_text())
-        snapshot["metadata"].update(rnn_path=str(rnn_path), mission=metrics["mission"], results=str(output_dir))
-        snapshot_path.write_text(json.dumps(snapshot, indent=2) + "\n")
-        plot_learning_curve(training_dir, output_dir / "learning_curve.png", show=args.show)
-        print(f"Result: {metrics['outcome']} at {metrics['duration_s']:.2f} s | "
-              f"peak {metrics['peak_altitude_m']:.3f} m | "
-              f"final vz {metrics['final_vertical_velocity_m_s']:.3f} m/s | "
-              f"return {metrics['return']:.1f}")
-        print(f"Results: {output_dir}")
-        print(f"TensorBoard: tensorboard --logdir {training_dir / 'tensorboard'}")
-        matlab_dir = str(project_root / "src" / "drone" / "closed_loop").replace("'", "''")
-        matlab_output = str(training_dir).replace("'", "''")
-        print(f"MATLAB: addpath('{matlab_dir}'); EINT_RL_eval('{matlab_output}', 0.0)")
-    finally:
-        env.close()
-
-
-if __name__ == "__main__":
-    main()
-

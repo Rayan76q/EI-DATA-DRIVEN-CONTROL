@@ -1,0 +1,100 @@
+{
+  "date": "2026-11-15",
+  "preservation": {
+    "original_files_verified": 2839,
+    "source_bytes_after": 543559,
+    "source_bytes_before_approx": 17825792,
+    "learning_settings_unchanged": true,
+    "main_unchanged": true
+  },
+  "unit_tests": {
+    "passed": 8
+  },
+  "notebooks": {
+    "executed": [
+      "src/model/notebooks/dataset_cleaning.ipynb",
+      "src/model/notebooks/inspect_rnn.ipynb",
+      "src/policy/notebooks/rl_z.ipynb",
+      "src/policy/notebooks/rl_z_psi.ipynb"
+    ],
+    "max_trajectories_for_rnn": 2,
+    "outputs_preserved_empty": true
+  },
+  "fresh_simulink_data_to_rnn": {
+    "z": {
+      "trajectories": 3,
+      "samples": 7,
+      "train_reload_env_export": "passed"
+    },
+    "z_psi": {
+      "trajectories": 3,
+      "samples": 7,
+      "train_reload_env_export": "passed"
+    }
+  },
+  "training_cli": [
+    {
+      "run": "z_ppo",
+      "actual_steps": 2560,
+      "selected_steps": 2560,
+      "execution": "passed"
+    },
+    {
+      "run": "z_dqn",
+      "actual_steps": 1100,
+      "selected_steps": 1100,
+      "execution": "passed"
+    },
+    {
+      "run": "z_sac",
+      "actual_steps": 329696,
+      "selected_steps": 327680,
+      "execution": "passed"
+    },
+    {
+      "run": "z_psi",
+      "actual_steps": 268288,
+      "selected_steps": 268288,
+      "execution": "passed"
+    }
+  ],
+  "nominal_simulink_missions": {
+    "z": {
+      "success": true,
+      "peak_altitude_m": 1.98297948952822,
+      "altitude_mae_m": 0.32502025400959933,
+      "sample_period_s": 0.04999999999999982,
+      "touchdown": {
+        "time_s": 8.0,
+        "z_m": -0.300299317500911,
+        "vz_m_s": 0.00881693099060749,
+        "altitude_hold_time_s": 2.5999999999999908
+      }
+    },
+    "z_psi": {
+      "success": true,
+      "peak_altitude_m": 1.90428129865292,
+      "altitude_mae_m": 0.3034214933370355,
+      "sample_period_s": 0.050000000000000044,
+      "touchdown": {
+        "time_s": 11.75,
+        "z_m": -0.301247423622388,
+        "vz_m_s": -0.0740301550412533,
+        "altitude_hold_time_s": 2.9000000000000026,
+        "psi_rad": 6.25886622784395,
+        "yaw_error_rad": -0.024319079335639593,
+        "yaw_rate_rad_s": 0.00893258621709185
+      }
+    }
+  },
+  "rnn_checkpoints": {
+    "src/model/checkpoints/rnn_z_psi.pt": "62df0ec2a39c48d027cc77331c30cd906aed6fe61417ece7af35e2deb196ea7e",
+    "src/model/checkpoints/rnn_z.pt": "e04679e19e4e13d381b6738a84cf2326e9bb2b506d5148dd887fbe029174a632"
+  },
+  "limits": [
+    "Short training runs check execution, not convergence.",
+    "RNN prediction plots use supplied data and are not held-out accuracy estimates.",
+    "Saved SAC still fails the plant landing-speed limit.",
+    "Optional Meshcat browser rendering was not tested."
+  ]
+}

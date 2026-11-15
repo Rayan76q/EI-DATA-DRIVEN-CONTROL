@@ -5,6 +5,3 @@ stable-baselines3>=2.3
 tensorboard>=2.14
 scipy>=1.10
 matplotlib>=3.7
-onnx>=1.15
-onnxruntime>=1.17
-pandas>=2.0
