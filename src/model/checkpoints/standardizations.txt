@@ -1,3 +1,7 @@
 rnn_model_robut.onnx :
 az output mean -9.68746566772461 ; std 21.440523147583008
 voltage input mean -0.004098882433027029 ; input std 1.7267645597457886
+
+rnn_thrust_yaw :
+Inputs mean: tensor([-1.3672e-02,  0.0000e+00,  0.0000e+00,  9.1857e-05]), std: tensor([1.6101, 0.0000, 0.0000, 0.1147])
+Outputs mean: tensor([-10.0084,   0.0174]), std: tensor([20.6563, 10.8079])
