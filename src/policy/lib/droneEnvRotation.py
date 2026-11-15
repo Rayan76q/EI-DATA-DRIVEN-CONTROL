@@ -13,12 +13,12 @@ from gymnasium import spaces
 import torch
 
 # Training statistics: inputs [thrust, roll, pitch, yaw], outputs [az, psi_ddot].
-MEAN_U = np.array([-0.0205, 0.0014, 0.0, 0.0], dtype=np.float32)
-SIGMA_U = np.array([6.4559, 0.4590, 0.0, 0.0], dtype=np.float32)
-MEAN_AZ = -9.9011
-SIGMA_AZ = 20.6719
-MEAN_WZ_DOT = 0.0310
-SIGMA_WZ_DOT = 10.7658
+MEAN_U = np.array([-1.3672e-02,  0.0000e+00,  0.0000e+00,  9.1857e-05], dtype=np.float32)
+SIGMA_U = np.array([1.6101, 0.0000, 0.0000, 0.1147], dtype=np.float32)
+MEAN_AZ = -10.0084
+SIGMA_AZ = 20.6563
+MEAN_WZ_DOT = 0.0174
+SIGMA_WZ_DOT = 10.8079
 
 # Physical parameters of the system
 PARAMS = SimpleNamespace(
@@ -40,7 +40,9 @@ Z_LAND = -0.3          # Landing platform altitude along vertical axis (m)
 Z_MAX = 10.0           # Ceiling altitude limit (m)
 SAFE_VZ = 0.5          # Maximum vertical touchdown speed for soft landing (m/s)
 SAFE_ANGULAR_SPEED = 0.5     # Maximum yaw speed at touchdown (rad/s)
-MAX_STEPS = 200        # Mission length: 10 s at Ts = 0.05 s
+MAX_STEPS = 400        # Mission length: 20 s at Ts = 0.05 s
+ALTITUDE_TOLERANCE = 0.2
+ALTITUDE_HOLD_TIME = 0.5
 
 
 def default_mission(t):
@@ -50,9 +52,9 @@ def default_mission(t):
     elif t < 5.0:
         return (2.0, 0.0)
     elif t < 8.0:
-        return (2.0, float(2.0 * np.pi * (t - 5.0) / 3.0))
+        return (2.0, float(2 * np.pi * (t - 5.0) / 3.0))
     else:
-        return (Z_LAND, float(2.0 * np.pi))
+        return (Z_LAND, float(2 * np.pi))
 
 
 
@@ -95,13 +97,13 @@ REWARD_PARAMS = SimpleNamespace(
     z_bonus=4.0,
     psi_bonus=4.0,
     z_penalty=2.0,
-    psi_penalty=0.2,
-    vz_penalty=0.1,
-    wz_penalty=0.02,
-    yaw_effort=10.0,
-    smoothness=1.0,
+    psi_penalty=1.0,
+    vz_penalty=0.2,
+    wz_penalty=0.1,
+    yaw_effort=0.01,
+    smoothness=0.02,
     success=100.0,
-    failure=-100.0,
+    failure=-25.0,
 )
 
 
@@ -116,9 +118,9 @@ def compute_reward(old_state, state, u, outcome, target_ref=(0.0, 0.0), u_prev=N
         z_status, psi_status = outcome, "has_turned"
 
     if z_status == "landed":
-        return r.success if psi_status == "has_turned" else -r.failure
-    if z_status in ("crashed", "lost", "timeout"):
-        return -r.failure
+        return r.success if psi_status == "has_turned" else -abs(r.failure)
+    if z_status in ("crashed", "lost", "timeout", "missed_altitude"):
+        return -abs(r.failure)
 
     z_ref, psi_ref = target_ref
     z = state[0]
@@ -130,7 +132,7 @@ def compute_reward(old_state, state, u, outcome, target_ref=(0.0, 0.0), u_prev=N
     r_z = r.z_bonus / (1.0 + (z - z_ref)**2) - r.z_penalty * hubber_loss(z - z_ref)
 
     # Same bonus for unwrapped yaw, keeping 0 and a complete turn distinct.
-    r_psi = r.psi_bonus / (1.0 + (psi - psi_ref)**2) 
+    r_psi = r.psi_bonus / (1.0 + (psi - psi_ref)**2) - r.psi_penalty * hubber_loss(psi - psi_ref)
 
     # Velocity penalties
     r_vel = -r.vz_penalty * hubber_loss(vz) - r.wz_penalty * hubber_loss(wz)
@@ -139,7 +141,7 @@ def compute_reward(old_state, state, u, outcome, target_ref=(0.0, 0.0), u_prev=N
     u_arr = np.asarray(u, dtype=np.float32).reshape(-1)
 
     # The second element is the direct yaw input.
-    r_act = -r.yaw_effort * abs(u_arr[1])
+    r_act = -r.yaw_effort * float(u_arr[1] ** 2)
 
     # Smoothness penalty
     if u_prev is not None:
@@ -190,6 +192,7 @@ class DroneEnv(gym.Env):
         self.u_prev = np.zeros(2, dtype=np.float32)
         self.az_prev = -self.p.g
         self.has_turned = False
+        self.altitude_hold_time = 0.0
         self.out = self.__class__.out
 
     def _obs(self):
@@ -220,6 +223,8 @@ class DroneEnv(gym.Env):
             settled = abs(self.state[16]) <= SAFE_ANGULAR_SPEED
             landing_phase = (z_ref == Z_LAND)
             z_status = self.out.landed if soft and settled and landing_phase else self.out.crashed
+            if z_status == self.out.landed and self.altitude_hold_time < ALTITUDE_HOLD_TIME:
+                z_status = "missed_altitude"
         elif z > Z_MAX:
             z_status = self.out.lost
         elif self.steps >= self.max_steps:
@@ -247,6 +252,10 @@ class DroneEnv(gym.Env):
         self.u_prev = np.zeros(2, dtype=np.float32)
         self.az_prev = self.state[2]
         self.has_turned = False
+
+        requires_climb = any(self.mission(i * self.p.dt)[0] > 0.0
+                             for i in range(self.max_steps + 1))
+        self.altitude_hold_time = 0.0 if requires_climb else ALTITUDE_HOLD_TIME
 
         z_ref, psi_ref = self.mission(self.t)
         info = {
@@ -283,6 +292,9 @@ class DroneEnv(gym.Env):
 
         self.steps += 1
         self.t = self.steps * self.p.dt
+        z_ref, _ = self.mission(self.t)
+        if z_ref > 0.0 and abs(self.state[0] - z_ref) <= ALTITUDE_TOLERANCE:
+            self.altitude_hold_time += self.p.dt
         status = self.outcome()
 
         target_ref = self.mission(self.t)
@@ -294,6 +306,8 @@ class DroneEnv(gym.Env):
 
         info = {
             "outcome": status,
+            "is_success": status == (self.out.landed, self.out.has_turned),
+            "altitude_hold_time": self.altitude_hold_time,
             "m": {
                 "t": self.t,
                 "z": float(self.state[0]),

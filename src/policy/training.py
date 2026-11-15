@@ -1,6 +1,7 @@
 """Policy training with saved settings, checkpoints and TensorBoard logs."""
 
 import json
+import hashlib
 from collections import deque
 from pathlib import Path
 
@@ -11,9 +12,11 @@ if __package__ in {None, ""}:
 
 import numpy as np
 import torch
+import gymnasium as gym
 from stable_baselines3 import DQN, PPO, SAC, __version__ as sb3_version
 from stable_baselines3.common.callbacks import BaseCallback, EvalCallback
 from stable_baselines3.common.env_util import make_vec_env
+from stable_baselines3.common.torch_layers import BaseFeaturesExtractor
 
 from .export_policy import export_for_matlab
 from .lib.droneEnv import CURRICULUM_HEIGHTS, DroneEnv, Z_LAND
@@ -22,6 +25,88 @@ from .lib.droneEnv import CURRICULUM_HEIGHTS, DroneEnv, Z_LAND
 CONFIG_DIR = Path(__file__).resolve().parent / "config"
 DEFAULT_CONFIG = CONFIG_DIR / "ppo.json"
 POLICY = "ppo"
+
+
+class ScaledControlActions(gym.ActionWrapper):
+    """Let PPO use [-1, 1] while the environment receives physical commands."""
+
+    def __init__(self, env, scale, offset):
+        super().__init__(env)
+        self.scale = np.asarray(scale, dtype=np.float32)
+        self.offset = np.asarray(offset, dtype=np.float32)
+        if self.scale.shape != env.action_space.shape or self.offset.shape != self.scale.shape:
+            raise ValueError("action_scale and action_offset must match the action shape")
+        if not np.all(self.scale > 0):
+            raise ValueError("action_scale must be positive")
+        if np.any(self.offset - self.scale < env.action_space.low) or np.any(self.offset + self.scale > env.action_space.high):
+            raise ValueError("Scaled action range must fit within the raw environment bounds")
+        self.action_space = gym.spaces.Box(-1.0, 1.0, shape=self.scale.shape, dtype=np.float32)
+
+    def action(self, action):
+        return np.clip(self.offset + self.scale * np.asarray(action, dtype=np.float32),
+                       self.env.action_space.low, self.env.action_space.high)
+
+
+def raw_action(agent, action):
+    """Convert a saved PPO action to the raw environment's thrust/yaw units."""
+    if getattr(agent, "action_scale", None) is None:
+        return action
+    return (np.asarray(agent.action_offset, dtype=np.float32)
+            + np.asarray(agent.action_scale, dtype=np.float32) * np.asarray(action, dtype=np.float32))
+
+
+class ScaledObservation(BaseFeaturesExtractor):
+    """Fixed physical-unit scaling saved inside the PPO policy checkpoint."""
+
+    def __init__(self, observation_space, scale):
+        super().__init__(observation_space, int(np.prod(observation_space.shape)))
+        self.register_buffer("scale", torch.as_tensor(scale, dtype=torch.float32))
+        if self.scale.shape != observation_space.shape or torch.any(self.scale <= 0):
+            raise ValueError("observation_scale must contain one positive value per observation")
+
+    def forward(self, observations):
+        return observations / self.scale
+
+
+class SuccessEvalCallback(EvalCallback):
+    """Keep successful missions ahead of failed missions when selecting a policy."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.best_success_rank = (0.0, -float("inf"))
+
+    def _on_step(self):
+        is_evaluation = self.eval_freq > 0 and self.n_calls % self.eval_freq == 0
+        keep_training = super()._on_step()
+        if is_evaluation and self._is_success_buffer:
+            rank = (float(np.mean(self._is_success_buffer)), self.last_mean_reward)
+            if rank[0] > 0 and rank > self.best_success_rank:
+                self.best_success_rank = rank
+                self.model.save(Path(self.best_model_save_path) / "best_success.zip")
+        return keep_training
+
+    def evaluate_now(self):
+        frequency = self.eval_freq
+        self.eval_freq = 1
+        try:
+            return self._on_step()
+        finally:
+            self.eval_freq = frequency
+
+    def _on_training_start(self):
+        self.evaluate_now()
+
+
+def dynamics_fingerprint(model, params=None):
+    """Identify the exact learned weights, independent of checkpoint packaging."""
+    digest = hashlib.sha256()
+    for name, value in sorted(model.state_dict().items()):
+        digest.update(name.encode())
+        digest.update(value.detach().cpu().contiguous().numpy().tobytes())
+    if params is not None:
+        values = {key: np.asarray(value).tolist() for key, value in vars(params).items()}
+        digest.update(json.dumps(values, sort_keys=True).encode())
+    return digest.hexdigest()
 
 
 def configured_checkpoint(config, key="checkpoint"):
@@ -111,6 +196,7 @@ def train_ppo(
     n_envs=None,
     env_class=DroneEnv,
     initial_log_std=None,
+    initial_checkpoint=None,
     config_path=DEFAULT_CONFIG,
     curriculum=None,
     **ppo_params,
@@ -127,6 +213,11 @@ def train_ppo(
     seed = config["seed"] if seed is None else seed
     n_envs = config["n_envs"] if n_envs is None else n_envs
     initial_log_std = config["initial_log_std"] if initial_log_std is None else initial_log_std
+    initial_action = config.get("initial_action")
+    observation_scale = config.get("observation_scale")
+    action_scale = config.get("action_scale")
+    action_offset = config.get("action_offset")
+    initial_checkpoint = initial_checkpoint or configured_checkpoint(config, "initial_checkpoint")
     params = {**config["ppo"], **ppo_params}
     if total_timesteps <= 0:
         raise ValueError("total_timesteps must be positive")
@@ -142,6 +233,12 @@ def train_ppo(
         "seed": seed,
         "n_envs": n_envs,
         "initial_log_std": initial_log_std,
+        "initial_action": initial_action,
+        "initial_checkpoint": str(initial_checkpoint) if initial_checkpoint else None,
+        "observation_scale": observation_scale,
+        "action_scale": action_scale,
+        "action_offset": action_offset,
+        "select_by_success": config.get("select_by_success", False),
         "ppo": params,
         "metadata": {
             "algorithm": "PPO",
@@ -152,6 +249,20 @@ def train_ppo(
         },
     }
     config_snapshot = output_dir / "ppo_config.json"
+    snapshot_env = env_class(rnn_model=rnn_model, mission=mission)
+    try:
+        resolved_config["metadata"]["dynamics"] = {
+            "weights_sha256": dynamics_fingerprint(rnn_model),
+            "parameters": {key: np.asarray(value).tolist() for key, value in vars(snapshot_env.p).items()},
+            "mission": [np.asarray(mission(i * snapshot_env.p.dt)).tolist()
+                        for i in range(snapshot_env.max_steps + 1)],
+        }
+        resolved_config["metadata"]["dynamics_sha256"] = dynamics_fingerprint(rnn_model, snapshot_env.p)
+        if config.get("select_by_success"):
+            from .lib.droneEnvRotation import REWARD_PARAMS
+            resolved_config["metadata"]["reward"] = vars(REWARD_PARAMS).copy()
+    finally:
+        snapshot_env.close()
     if curriculum is not None:
         resolved_config["curriculum"] = {
             "difficulty": curriculum.difficulty, "heights": list(curriculum.heights),
@@ -159,29 +270,82 @@ def train_ppo(
             "window_size": curriculum.successes.maxlen,
         }
     config_snapshot.write_text(json.dumps(resolved_config, indent=2) + "\n")
+    def make_training_env(training=False):
+        env = env_class(rnn_model=rnn_model, mission=mission, **(
+            {"difficulty": curriculum.difficulty} if training and curriculum is not None else {}
+        ))
+        return ScaledControlActions(env, action_scale, action_offset) if action_scale is not None else env
+
     train_env = make_vec_env(
-        lambda: env_class(rnn_model=rnn_model, mission=mission, **(
-            {"difficulty": curriculum.difficulty} if curriculum is not None else {}
-        )),
+        lambda: make_training_env(training=True),
         n_envs=n_envs,
         seed=seed,
         monitor_dir=str(output_dir),
     )
     eval_env = make_vec_env(
-        lambda: env_class(rnn_model=rnn_model, mission=mission),
+        make_training_env,
         n_envs=1,
         seed=100,
     )
     try:
-        agent = PPO(
-            "MlpPolicy", train_env, seed=seed, device="cpu", verbose=0,
-            tensorboard_log=str(output_dir / "tensorboard"), **params,
-        )
-        if initial_log_std is not None:
+        runtime_params = dict(params)
+        if observation_scale is not None:
+            runtime_params["policy_kwargs"] = {
+                **(params.get("policy_kwargs") or {}),
+                "features_extractor_class": ScaledObservation,
+                "features_extractor_kwargs": {"scale": observation_scale},
+            }
+        if initial_checkpoint is not None:
+            agent = PPO.load(
+                initial_checkpoint, env=train_env, device="cpu",
+                tensorboard_log=str(output_dir / "tensorboard"),
+            )
+            # PPO.load restores its own settings; reject conflicting resume configs.
+            for name, requested in params.items():
+                actual = getattr(agent, name)
+                if name == "policy_kwargs":
+                    matches = all(actual.get(key) == value for key, value in requested.items())
+                else:
+                    actual = actual(1.0) if callable(actual) else actual
+                    matches = actual == requested
+                if not matches:
+                    raise ValueError(f"Resumed PPO has a different {name}; use its saved training config")
+            agent.set_random_seed(seed)
+        else:
+            agent = PPO(
+                "MlpPolicy", train_env, seed=seed, device="cpu", verbose=0,
+                tensorboard_log=str(output_dir / "tensorboard"), **runtime_params,
+            )
+        if initial_action is not None and initial_checkpoint is None:
+            with torch.no_grad():
+                action = torch.as_tensor(initial_action, dtype=torch.float32)
+                if action.shape != agent.policy.action_net.bias.shape:
+                    raise ValueError("initial_action must match the environment action shape")
+                agent.policy.action_net.weight.zero_()
+                agent.policy.action_net.bias.copy_(action)
+        if initial_log_std is not None and initial_checkpoint is None:
             with torch.no_grad():
                 agent.policy.log_std.copy_(torch.tensor(initial_log_std, dtype=torch.float32))
 
-        callback = EvalCallback(
+        if initial_checkpoint is not None:
+            if getattr(agent, "action_scale", None) != action_scale or getattr(agent, "action_offset", None) != action_offset:
+                raise ValueError("Resumed PPO must use the same action scaling as this config")
+            previous_dynamics = getattr(agent, "dynamics_sha256", None)
+            if previous_dynamics is not None and previous_dynamics != resolved_config["metadata"]["dynamics_sha256"]:
+                raise ValueError("Resumed PPO used different RNN weights or normalization")
+            saved_scale = getattr(agent.policy.features_extractor, "scale", None)
+            if ((saved_scale is None) != (observation_scale is None) or (
+                observation_scale is not None and not np.allclose(
+                    saved_scale.detach().cpu().numpy(), observation_scale
+                )
+            )):
+                raise ValueError("Resumed PPO must use the same observation scaling as this config")
+        agent.action_scale, agent.action_offset = action_scale, action_offset
+        if config.get("select_by_success"):
+            agent.dynamics_sha256 = resolved_config["metadata"]["dynamics_sha256"]
+
+        callback_class = SuccessEvalCallback if config.get("select_by_success") else EvalCallback
+        callback = callback_class(
             eval_env,
             best_model_save_path=str(output_dir),
             log_path=str(output_dir),
@@ -191,15 +355,28 @@ def train_ppo(
             verbose=0,
         )
         callbacks = callback if curriculum is None else [curriculum, callback]
-        agent.learn(total_timesteps=total_timesteps, callback=callbacks, tb_log_name="PPO")
+        initial_steps = agent.num_timesteps
+        if initial_steps >= total_timesteps:
+            raise ValueError("total_timesteps must exceed the resumed policy's existing steps")
+        if initial_checkpoint is not None:
+            resolved_config["metadata"]["warm_start"] = {
+                "checkpoint": str(initial_checkpoint), "initial_timesteps": initial_steps,
+            }
+        agent.learn(
+            total_timesteps=total_timesteps - initial_steps, callback=callbacks,
+            tb_log_name="PPO", reset_num_timesteps=initial_checkpoint is None,
+        )
+        if isinstance(callback, SuccessEvalCallback):
+            callback.evaluate_now()
         # SB3 logs before each update; save the final update's losses too.
         agent.logger.dump(step=agent.num_timesteps)
         agent.logger.close()
         final_path = output_dir / "ppo_drone_rnn.zip"
         agent.save(final_path)
         best_path = output_dir / "best_model.zip"
+        success_path = output_dir / "best_success.zip"
         # Fixed 2 m evaluation cannot select progress across curriculum heights.
-        checkpoint_path = (
+        checkpoint_path = success_path if config.get("select_by_success") and success_path.is_file() else (
             best_path if curriculum is None and best_path.is_file()
             and callback.best_mean_reward > float("-inf") else final_path
         )
@@ -208,6 +385,9 @@ def train_ppo(
             checkpoint=str(checkpoint_path.resolve()),
         )
         selected_agent = PPO.load(checkpoint_path, device="cpu")
+        if config.get("select_by_success"):
+            selected_agent.dynamics_sha256 = resolved_config["metadata"]["dynamics_sha256"]
+            selected_agent.save(checkpoint_path)
         export_env = env_class(rnn_model=rnn_model, mission=mission)
         try:
             if export_env.observation_space.shape == (3,) and export_env.action_space.shape == (1,):

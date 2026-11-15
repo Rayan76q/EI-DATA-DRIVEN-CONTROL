@@ -1,0 +1,17 @@
+# Local datasets and generated results; MATLAB source and Simulink models are versioned.
+*.csv
+/src/policy/logs/
+/src/policy/export_logs/
+
+# Python/Jupyter runtime files.
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+.venv/
+
+# Generated MATLAB/Simulink cache and build files.
+*.asv
+*.slxc
+slprj/
+*_grt_rtw/
+

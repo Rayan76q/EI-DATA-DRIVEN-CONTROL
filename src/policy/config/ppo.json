@@ -1,5 +1,5 @@
 {
-  "total_timesteps": 1500000,
+  "total_timesteps": 700000,
   "seed": 0,
   "n_envs": 10,
   "initial_log_std": null,
