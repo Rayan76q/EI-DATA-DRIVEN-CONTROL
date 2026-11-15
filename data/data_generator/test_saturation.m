@@ -1,4 +1,4 @@
-% Script de test des Saturations 
+% Script de test des Saturations
 
 
 
@@ -13,25 +13,26 @@ if ~isfolder(generated_dir); mkdir(generated_dir); end;
 %% 1. Initialisation
 disp('Initialisation des variables du workspace...');
 random_init;
-load_system(fullfile(plant_dir, 'EINT_system_simulation.slx')); 
+load_system(fullfile(plant_dir, 'EINT_system_simulation.slx'));
 
-if ~exist('Ts', 'var')
-    Ts = 0.05; % Période d'échantillonnage par défaut[cite: 2]
-end
+Ts = 0.05; % Match RNN and RL sampling.
 
 T_sim = 25; % Une simulation courte de 25 secondes suffit
 t = (0:Ts:T_sim)';
 
 %% 2. Création d'un signal de test en escalier (Staircase)
 % Ce signal va forcer le système à passer par tous les extrêmes
-u_start = 0; 
-u_end = -5;    
+u_start = 0;
+u_end = -5;
 
 u_input = u_start + (u_end - u_start) * (t / T_sim);
 
 % Création de l'objet timeseries attendu par le bloc "From Workspace"
 sim_input = timeseries(u_input, t);
 assignin('base', 'sim_input', sim_input);
+for motor = 1:4
+    assignin('base', sprintf('sim_u%d',motor), sim_input);
+end
 
 %% 3. Lancement rapide de la simulation
 disp('Lancement de la simulation (Mode Accelerator)...');
@@ -47,11 +48,11 @@ if isa(out.simout, 'timeseries')
 elseif isstruct(out.simout) && isfield(out.simout, 'signals')
     all_outputs = out.simout.signals.values;
 else
-    all_outputs = out.simout; 
+    all_outputs = out.simout;
 end
 
 % Indices de l'axe Z (à vérifier selon votre modèle)
-idx_vz = 6;  
+idx_vz = 6;
 idx_az = 9;
 
 vz = all_outputs(1:length(t), idx_vz);

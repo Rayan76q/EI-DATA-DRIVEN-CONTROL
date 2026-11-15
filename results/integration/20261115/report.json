@@ -1,0 +1,358 @@
+{
+  "date": "2026-11-15",
+  "branch": "final",
+  "integration_status": "Primary z and z+psi pipelines passed; existing SAC plant transfer fails",
+  "merge": {
+    "local_preservation_commit": "9ff94d9",
+    "team_merge_commit": "a505ddf",
+    "origin_final": "48a878163d9ce2248069baaf618b9926bc7b900f",
+    "main_unchanged": "d594c94d9957a4a1a7534402b2b8a3008ceca04f",
+    "main_asset_import": "src/drone/plant/EINT_system_simulationPID.slx"
+  },
+  "policy_preservation": "No RL weights, configs, rewards or training hyperparameters changed during integration",
+  "matlab_numerical_validation": {
+    "matlab_version": "26.2.0.3433840 (R2026b) Update 1",
+    "policy_checks": [
+      {
+        "status": "passed",
+        "samples": 169,
+        "independent_probes": 182,
+        "max_action_error": 2.618305519064279e-07,
+        "export_dir": "/home/rayan768/CS/drone/EI-DATA-DRIVEN-CONTROL/results/integration/20261115/z_ppo",
+        "rnn": {
+          "status": "passed",
+          "samples": 64,
+          "max_prediction_error": 2.91827746e-06
+        }
+      },
+      {
+        "status": "passed",
+        "samples": 151,
+        "independent_probes": 164,
+        "max_action_error": 1.484431134457509e-06,
+        "export_dir": "/home/rayan768/CS/drone/EI-DATA-DRIVEN-CONTROL/results/integration/20261115/z_sac"
+      },
+      {
+        "status": "passed",
+        "samples": 155,
+        "independent_probes": 168,
+        "max_action_error": 0,
+        "export_dir": "/home/rayan768/CS/drone/EI-DATA-DRIVEN-CONTROL/results/integration/20261115/z_dqn"
+      },
+      {
+        "status": "passed",
+        "samples": 237,
+        "independent_probes": 262,
+        "max_action_error": 1.155016211562554e-07,
+        "export_dir": "/home/rayan768/CS/drone/EI-DATA-DRIVEN-CONTROL/results/integration/20261115/z_psi_ppo",
+        "rnn": {
+          "status": "passed",
+          "samples": 64,
+          "max_prediction_error": 1.62362576e-05
+        }
+      }
+    ],
+    "simulink_installed": true,
+    "simulink_licensed": true
+  },
+  "plant": {
+    "z_ppo_default": {
+      "success": true,
+      "peak_altitude_m": 1.98297948952822,
+      "altitude_mae_m": 0.32502025400959933,
+      "sample_period_s": 0.04999999999999982,
+      "touchdown": {
+        "time_s": 8.0,
+        "z_m": -0.300299317500911,
+        "vz_m_s": 0.00881693099060749,
+        "altitude_hold_time_s": 2.5999999999999908
+      },
+      "policy": {
+        "path": "results/altitude/ppo/20261105_202000_ztol02/training/best_model.zip",
+        "sha256": "3d7f4b1435b63ceb8acb82de5044fbebf8052a04210de8aba56d5d93b3d9f242"
+      },
+      "trajectory": "main_z/plant/trajectory.csv"
+    },
+    "z_ppo_bundled": {
+      "success": true,
+      "peak_altitude_m": 1.9989805250731,
+      "altitude_mae_m": 0.3121455551610125,
+      "sample_period_s": 0.04999999999999982,
+      "touchdown": {
+        "time_s": 8.2,
+        "z_m": -0.303626356947222,
+        "vz_m_s": -0.12486731648506,
+        "altitude_hold_time_s": 2.6499999999999906
+      },
+      "policy": {
+        "path": "src/policy/checkpoints/ppo_drone_rnn.zip",
+        "sha256": "f9c971f321fafdefc1a649fe1fe546f2e81195f9ea182dcd51ae7de0194099b4"
+      },
+      "trajectory": "plant_z_ppo/trajectory.csv"
+    },
+    "z_psi_ppo": {
+      "success": true,
+      "peak_altitude_m": 1.90428129865292,
+      "altitude_mae_m": 0.3034214933370355,
+      "sample_period_s": 0.050000000000000044,
+      "touchdown": {
+        "time_s": 11.75,
+        "z_m": -0.301247423622388,
+        "vz_m_s": -0.0740301550412533,
+        "altitude_hold_time_s": 2.9000000000000026,
+        "psi_rad": 6.25886622784395,
+        "yaw_error_rad": -0.024319079335639593,
+        "yaw_rate_rad_s": 0.00893258621709185
+      },
+      "policy": {
+        "path": "src/policy/checkpoints/ppo_drone_thrust_speeds.zip",
+        "sha256": "c93e101293da71965bc9d9e985ca0140dba008fe04a048a915da51b2d75b3eba"
+      },
+      "trajectory": "main_z_psi/plant/trajectory.csv"
+    },
+    "z_dqn": {
+      "success": true,
+      "peak_altitude_m": 2.04448386050034,
+      "altitude_mae_m": 0.2706217494087807,
+      "sample_period_s": 0.04999999999999982,
+      "touchdown": {
+        "time_s": 7.3,
+        "z_m": -0.305844107704688,
+        "vz_m_s": -0.260863694761146,
+        "altitude_hold_time_s": 2.6999999999999904
+      },
+      "policy": {
+        "path": "results/altitude/dqn/20261106_restored_baseline/training/best_model.zip",
+        "sha256": "1b2e8a44bf378110bd312f647c8ec42c7a1f642b24efc082646fe380afdbad2d"
+      },
+      "trajectory": "plant_z_dqn/trajectory.csv"
+    },
+    "z_sac": {
+      "success": false,
+      "peak_altitude_m": 1.85475625060704,
+      "altitude_mae_m": 0.47247918536078004,
+      "sample_period_s": 0.04999999999999982,
+      "touchdown": {
+        "time_s": 7.0,
+        "z_m": -0.372210956730462,
+        "vz_m_s": -1.32090914781754,
+        "altitude_hold_time_s": 0.4499999999999984
+      },
+      "policy": {
+        "path": "results/altitude/sac/20261106_ztol_warm_start_500k/training/best_model.zip",
+        "sha256": "8fe2b42823ae6578fbb6fda0c66f6b9d3bf4caf71e62e5189223e8386c2a2bf8"
+      },
+      "trajectory": "plant_z_sac/trajectory.csv"
+    }
+  },
+  "older_sac_plant_checks": {
+    "20261105_202000_ztol02": {
+      "success": false,
+      "peak_altitude_m": 1.81723295004631,
+      "altitude_mae_m": 0.5040633323580854,
+      "sample_period_s": 0.04999999999999982,
+      "touchdown": {
+        "time_s": 7.05,
+        "z_m": -0.359916770489527,
+        "vz_m_s": -1.40325699706331,
+        "altitude_hold_time_s": 0.14999999999999947
+      },
+      "policy": {
+        "path": "results/altitude/sac/20261105_202000_ztol02/training/best_model.zip",
+        "sha256": "6c1bad6550e947016d47a9b36852cc92ab65db7244a7b7a90c0a617c59fd0d39"
+      }
+    },
+    "20261105_193731_full": {
+      "success": false,
+      "peak_altitude_m": 2.05650862030697,
+      "altitude_mae_m": 0.2576125668557934,
+      "sample_period_s": 0.04999999999999982,
+      "touchdown": {
+        "time_s": 7.05,
+        "z_m": -0.306911104921788,
+        "vz_m_s": -0.507853938863507,
+        "altitude_hold_time_s": 2.9999999999999893
+      },
+      "policy": {
+        "path": "results/altitude/sac/20261105_193731_full/training/best_model.zip",
+        "sha256": "c2b16921c75e9de6cf6016798f2e933c74ec954986cd727bb6ebb2117eb5e946"
+      }
+    }
+  },
+  "main_cli": {
+    "z": {
+      "status": "completed",
+      "policy": {
+        "status": "passed",
+        "samples": 164,
+        "independent_probes": 177,
+        "max_action_error": 1.680170096385325e-07
+      },
+      "rnn": {
+        "status": "passed",
+        "samples": 64,
+        "max_prediction_error": 2.91827746e-06
+      },
+      "returncode": 0,
+      "log": "/home/rayan768/CS/drone/EI-DATA-DRIVEN-CONTROL/results/integration/20261115/main_z/matlab.log",
+      "executable": "/home/rayan768/bin/matlab",
+      "plant": {
+        "success": true,
+        "peak_altitude_m": 1.98297948952822,
+        "altitude_mae_m": 0.32502025400959933,
+        "touchdown": {
+          "time_s": 8.0,
+          "z_m": -0.300299317500911,
+          "vz_m_s": 0.00881693099060749,
+          "altitude_hold_time_s": 2.5999999999999908
+        }
+      }
+    },
+    "z_psi": {
+      "status": "completed",
+      "policy": {
+        "status": "passed",
+        "samples": 237,
+        "independent_probes": 262,
+        "max_action_error": 1.155016211562554e-07
+      },
+      "rnn": {
+        "status": "passed",
+        "samples": 64,
+        "max_prediction_error": 1.62362576e-05
+      },
+      "returncode": 0,
+      "log": "/home/rayan768/CS/drone/EI-DATA-DRIVEN-CONTROL/results/integration/20261115/main_z_psi/matlab.log",
+      "executable": "/home/rayan768/bin/matlab",
+      "plant": {
+        "success": true,
+        "peak_altitude_m": 1.90428129865292,
+        "altitude_mae_m": 0.3034214933370355,
+        "touchdown": {
+          "time_s": 11.75,
+          "z_m": -0.301247423622388,
+          "vz_m_s": -0.0740301550412533,
+          "altitude_hold_time_s": 2.9000000000000026,
+          "psi_rad": 6.25886622784395,
+          "yaw_error_rad": -0.024319079335639593,
+          "yaw_rate_rad_s": 0.00893258621709185
+        }
+      }
+    }
+  },
+  "data_generation_to_training": {
+    "z": {
+      "status": "passed",
+      "trajectories": 3,
+      "samples_per_trajectory": 7,
+      "end_acceleration_std": [
+        0.5198720097541809
+      ],
+      "checkpoint": "results/integration/20261115/generated_rnn_z/rnn.pt",
+      "onnx_max_error": 5.960464477539063e-08
+    },
+    "z_psi": {
+      "status": "passed",
+      "trajectories": 3,
+      "samples_per_trajectory": 7,
+      "end_acceleration_std": [
+        1.2913496494293213,
+        13.356860160827637
+      ],
+      "checkpoint": "results/integration/20261115/generated_rnn_z_psi/rnn.pt",
+      "onnx_max_error": 1.4901161193847656e-07
+    }
+  },
+  "provided_data_training": {
+    "z": {
+      "epochs": 1,
+      "max_trajectories": 8,
+      "last_epoch": {
+        "epoch": 1,
+        "train_loss": 0.9876469969749451,
+        "test_loss": 0.9459055066108704
+      },
+      "input": "/home/rayan768/CS/drone/EI-DATA-DRIVEN-CONTROL/data/initial_data/bdd_in_mat_05.csv",
+      "output": "/home/rayan768/CS/drone/EI-DATA-DRIVEN-CONTROL/data/initial_data/bdd_out_mat_05.csv"
+    },
+    "z_psi": {
+      "epochs": 1,
+      "max_trajectories": 8,
+      "last_epoch": {
+        "epoch": 1,
+        "train_loss": 0.9705848693847656,
+        "test_loss": 1.2739901542663574
+      },
+      "input": "/home/rayan768/CS/drone/EI-DATA-DRIVEN-CONTROL/data/generated_data/db_regime6_helico_input.csv",
+      "output": "/home/rayan768/CS/drone/EI-DATA-DRIVEN-CONTROL/data/generated_data/db_regime6_helico_output.csv"
+    }
+  },
+  "rl_training_smoke": {
+    "z_ppo": {
+      "checkpoint": "results/integration/20261115/rl_training_smoke/z_ppo/ppo_drone_rnn.zip",
+      "selected_steps": 2560,
+      "actual_timesteps": 2560
+    },
+    "z_dqn": {
+      "checkpoint": "results/integration/20261115/rl_training_smoke/z_dqn/dqn_drone_rnn.zip",
+      "updates": 100,
+      "actual_timesteps": 1100
+    },
+    "z_sac": {
+      "checkpoint": "results/integration/20261115/rl_training_smoke/z_sac/best_model.zip",
+      "selected_steps": 327680,
+      "actual_timesteps": 329696
+    },
+    "z_psi_ppo": {
+      "checkpoint": "results/integration/20261115/rl_training_smoke/z_psi_ppo/best_success.zip",
+      "selected_steps": 268288,
+      "initial_steps": 266240,
+      "actual_timesteps": 268288
+    }
+  },
+  "unit_tests": {
+    "passed": 8,
+    "log": "unit_tests.log"
+  },
+  "static_validation": {
+    "python": "all src/tests files parse",
+    "notebooks_validated_compiled": [
+      "src/policy/notebooks/rl_z_angles.ipynb",
+      "src/policy/notebooks/rl_z.ipynb",
+      "src/policy/notebooks/rl_onnx.ipynb",
+      "src/model/notebooks/test_model_az_wdotz.ipynb",
+      "src/model/notebooks/dataset_cleaning.ipynb",
+      "src/model/notebooks/test_model_az.ipynb"
+    ],
+    "default_dqn_sac_exports_match_plant_tested": true
+  },
+  "notebook_execution": {
+    "status": "passed",
+    "max_trajectories": 8,
+    "notebooks": [
+      "dataset_cleaning.ipynb",
+      "test_model_az.ipynb",
+      "test_model_az_wdotz.ipynb"
+    ],
+    "scope": "Data loading, preparation, normalization, model inference and export cells; outputs preserved"
+  },
+  "preservation_report": "preservation.json",
+  "acceptance": {
+    "control_period_s": 0.05,
+    "landing_altitude_m": -0.3,
+    "max_abs_touchdown_vz_m_s": 0.5,
+    "altitude_tolerance_m": 0.2,
+    "min_cumulative_positive_reference_occupancy_s": 0.5,
+    "yaw_error_tolerance_deg": 10,
+    "max_abs_touchdown_yaw_rate_rad_s": 0.5,
+    "yaw": "unwrapped, full 2*pi turn",
+    "plant_noise_gain": 0
+  },
+  "limitations": [
+    "SAC actor/export checks pass, but selected and two older policies violate plant landing criteria. User chose preservation over tuning.",
+    "Short RNN and RL training runs verify execution and contracts, not convergence.",
+    "Plant success uses the first sampled landing threshold event; the continuous plant has no ground/contact model and runs after touchdown.",
+    "Zero-noise nominal missions only; no robustness claim for noise or varied initial conditions.",
+    "Hover occupancy is cumulative, not a continuous settling requirement."
+  ]
+}

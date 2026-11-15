@@ -1,383 +1,232 @@
 # Data-driven drone control
 
-RNN dynamics, RL control and Simulink experiments for the
-[EINT project](EINT_student_version_EN.pdf). The current experiment controls
-altitude with a sampling period of 0.05 s. Yaw and x motion come later.
+RNN dynamics, reinforcement learning and Simulink deployment for the
+[EINT project](EINT_student_version_EN.pdf). Two missions are supported at a
+0.05 s control period: climb/hover/land on z, and climb/hover/complete a full
+turn on ψ/land. The existing RL configurations and policy weights are preserved.
 
-## Files
+## Run the saved policies
 
-```text
-data/
-  initial_data/          Supplied measurements
-  generated_data/        New training CSVs
-  data_generator/        MATLAB generation scripts and CSV filter
-src/
-  main_model.py          Run the altitude RNN
-  main_z.py              Choose a saved RL model, evaluate and export to MATLAB
-  model/
-    rnn_loader.py        Checkpoint loading
-    checkpoints/        rnn_z.pt, rnn_z.onnx, rnn_z/ and rotation checkpoints
-    training/           Existing RNN training scripts
-    estimation/         RNN/EKF experiments and tests
-    notebooks/          Model inspection
-  policy/
-    config/             ppo.json, dqn.json and sac.json training settings
-    lib/
-      droneEnv.py        Altitude environment
-      droneEnvRotation.py  Rotation environment
-      droneEnvGeneral.py   Historical general environment
-      discrete_actions.py DQN command grid
-    training.py         Choose and train PPO/DQN/SAC; export the trained agent
-    evaluation.py       Flight metrics and plots
-    export_policy.py    Altitude policy and mission export
-    checkpoints/        Saved policies
-    notebooks/          RL experiments and exercise template
-  drone/
-    plant/              Standalone Simulink drone and protected dynamics
-    closed_loop/        Simulink controllers and policy evaluation
-    visualization/      Optional Meshcat viewer
-results/                Run outputs, ignored by Git
-  altitude/             Python policy evaluations and training runs
-  closed_loop/          Simulink trajectories and scope exports
-```
-
-`data/` and `.data/` inside extracted checkpoints are PyTorch tensor storage
-and metadata, not datasets. Keep them beside `data.pkl`, `version` and
-`byteorder`. The older 16-hidden-unit checkpoint is in
-`src/model/checkpoints/legacy_z/`.
-
-## Architecture
-
-```mermaid
-flowchart LR
-    Plant["src/drone/plant: Simulink drone"] --> Generator["data/data_generator: MATLAB scripts"]
-    Generator --> CSV["data/generated_data: CSV trajectories"]
-    CSV -. "RNN training: missing dataset/code" .-> RNN["src/model: RNN checkpoint and loader"]
-    RNN --> Env["src/policy/lib: Gymnasium environment"]
-    Config["src/policy/config: ppo.json, dqn.json, sac.json"] --> Train["policy.training: train_ppo / train_off_policy"]
-    Env --> Train
-    Train --> Policy["PPO / DQN / SAC policy"]
-    Train --> Logs["TensorBoard events and resolved config"]
-    Saved["Saved checkpoint"] --> Policy
-    Policy --> Eval["policy.evaluation.evaluate_policy"]
-    Env --> Eval
-    Eval --> Results["Flight plots, trajectories, metrics"]
-    Policy --> Export["policy.export_policy.export_for_matlab"]
-    Env --> Export
-    Export --> MAT["policy.mat and traj_model.mat"]
-    MAT --> MATLAB["src/drone/closed_loop: EINT_RL_eval"]
-    Plant --> MATLAB
-    MATLAB --> Scopes["results/closed_loop: physical state traces and figures"]
-```
-
-`main_model.py` runs dynamics inference. `policy/training.py` trains the chosen
-policy and exports the selected checkpoint for MATLAB. `main_z.py` loads the
-chosen RL model, evaluates the flight and exports the policy and mission.
-The MATLAB generator uses the standalone
-plant; closed-loop evaluation combines that plant with the exported policy.
-The dashed link marks RNN training that still needs its missing inputs.
-
-The UML below shows existing types. `AltitudeEnv` and `RotationEnv` are
-labels for the two separately defined `DroneEnv` classes, not new classes.
-
-```mermaid
-classDiagram
-    class TorchModule["torch.nn.Module"]
-    class CheckpointRNN {
-        +rnn : nn.RNN
-        +head : nn.Module
-        +forward(x, hidden)
-    }
-    class GymEnv["gymnasium.Env"]
-    class AltitudeEnv["DroneEnv (altitude)"] {
-        +rnn_model
-        +hidden_state
-        +mission
-        +reset(seed, options, new_mission)
-        +step(action)
-        +outcome()
-    }
-    class RotationEnv["DroneEnv (rotation)"] {
-        +rnn_model
-        +hidden_state
-        +mission
-        +reset(seed, options, new_mission)
-        +step(action)
-        +outcome()
-    }
-    class PPO["stable_baselines3.PPO"] {
-        +policy
-        +learn(total_timesteps)
-        +predict(observation)
-        +save(path)
-    }
-    class ActorCriticPolicy
-    class DQN["stable_baselines3.DQN"] {
-        +q_net
-        +learn(total_timesteps)
-        +predict(observation)
-        +save(path)
-    }
-    class SAC["stable_baselines3.SAC"] {
-        +actor
-        +learn(total_timesteps)
-        +predict(observation)
-        +save(path)
-    }
-    class ActionWrapper["gymnasium.ActionWrapper"]
-    class DiscreteDroneActions {
-        +commands
-        +action(index)
-    }
-    TorchModule <|-- CheckpointRNN
-    GymEnv <|-- AltitudeEnv
-    GymEnv <|-- RotationEnv
-    AltitudeEnv o-- CheckpointRNN : dynamics
-    RotationEnv o-- CheckpointRNN : dynamics
-    PPO --> GymEnv : samples via vector environments
-    PPO *-- ActorCriticPolicy : policy
-    SAC --> GymEnv : samples via vector environments
-    ActionWrapper <|-- DiscreteDroneActions
-    DiscreteDroneActions o-- AltitudeEnv : maps index to collective command
-    DQN --> DiscreteDroneActions : samples via vector environments
-    note for CheckpointRNN "model.rnn_loader.CheckpointRNN"
-    note for AltitudeEnv "policy.lib.droneEnv.DroneEnv"
-    note for RotationEnv "policy.lib.droneEnvRotation.DroneEnv"
-```
-
-The environments each hold their own recurrent state; training instances
-share fixed RNN weights. Policies see observations and rewards from the selected
-environment, rather than the mission schedule or RNN hidden state.
-
-## Python
-
-Run from the repository root with Python 3.10 or later:
+From the repository root, install `requirements.txt` in your Python environment:
 
 ```sh
-python -m venv .venv
-source .venv/bin/activate
 python -m pip install -r requirements.txt
-python src/main_model.py
 python src/main_z.py --output-dir results/altitude/demo
+python src/main_z_psi.py --output-dir results/altitude_psi/demo
 ```
 
-`main_model.py` loads `src/model/checkpoints/rnn_z.pt` and runs 200 samples
-with a constant command near hover. It saves `rnn_inference.csv`,
-`rnn_inference.png` and `metrics.json` under `results/model/`.
-To compare acceleration predictions with the first measured trajectory:
+Both mains evaluate the saved policy on its RNN, export it, check its numerical
+agreement in MATLAB, and run the actual Simulink plant. MATLAB is discovered
+through `--matlab PATH`, `MATLAB_EXECUTABLE`, `PATH`, or `~/bin/matlab`.
+Use `--skip-matlab` for Python evaluation and export only. Missing MATLAB or
+Simulink is recorded explicitly; it never counts as a plant pass. MATLAB logs,
+status, physical trajectories and plots are saved beside the Python results.
+
+The altitude mission requests 0 m until 2 s, 2 m until 6 s, then −0.3 m, with a
+10 s horizon. The z+ψ mission uses the schedule in
+`policy.lib.droneEnvRotation.default_mission`: a 2 m hover, an unwrapped 2π turn,
+and landing, with a 20 s horizon. The policies observe current tracking errors
+and motion; they do not observe the future schedule.
+
+| Main | Observation | Physical control | Default dynamics |
+| --- | --- | --- | --- |
+| `src/main_z.py` | z−z_ref, vz, az | Collective motor command | `rnn_z.pt`, 1 input / 1 acceleration output |
+| `src/main_z_psi.py` | z−z_ref, vz, az, ψ−ψ_ref, wz, wdotz | Thrust and differential yaw | `rnn_model_thrust_speeds.pt`, 4 controls / 2 acceleration outputs |
+
+The altitude main accepts `--rl-model ppo|dqn|sac`, `--policy PATH`, `--rnn PATH`
+and `--config PATH`. DQN requires its `commands.npy` beside the checkpoint.
+The rotation main accepts `--policy`, `--rnn` and `--config` too; its current
+saved policy is PPO. Its saved observation and action scaling are restored
+from the agent, and a dynamics fingerprint rejects an incompatible RNN.
+
+## Integration results
+
+The integration on 2026-11-15 ran MATLAB R2026b Update 1 and Simulink with zero
+plant noise. See [the validation report](results/integration/20261115/report.json)
+and [the detailed findings](results/integration/20261115/README.md).
+
+| Saved policy | Simulink mission | First touchdown | Vertical speed |
+| --- | --- | --- | --- |
+| PPO z, main's selected saved run | Passed | 8.00 s | +0.009 m/s |
+| PPO z+ψ | Passed; yaw error about 1.39° | 11.75 s | −0.074 m/s |
+| DQN z | Passed | 7.30 s | −0.261 m/s |
+| SAC z, selected 389,120-step checkpoint | Failed: hard landing | 7.00 s | −1.321 m/s |
+
+The bundled `ppo_drone_rnn.zip` was also checked: it lands at 8.20 s with
+−0.125 m/s vertical speed. The report records each exact checkpoint path.
+
+SAC's exported actor agrees numerically with Stable-Baselines3, and the saved
+policy lands on its RNN dynamics. Its plant transfer does not meet the landing
+speed limit. The older 327,680-step checkpoint also fails on the plant
+(−1.403 m/s); another older policy reaches −0.508 m/s, still outside the
+0.5 m/s limit. As requested, the RL policies and configurations remain intact;
+this integration does not retune SAC or replace its checkpoint.
+
+Plant acceptance is measured at the first sampled z≤−0.3 m during landing,
+with |vz|≤0.5 m/s and at least 0.5 s cumulative occupancy within ±0.2 m of the
+positive altitude reference before touchdown. Rotation additionally requires
+unwrapped yaw error≤10° and |wz|≤0.5 rad/s. This occupancy measure does not
+assert a continuous settled hover. The plant has no contact model and continues
+to the full horizon after this virtual touchdown; later samples do not change
+the first-touchdown verdict. These checks establish the reported deterministic
+missions, rather than robustness across noise and initial conditions.
+
+## Generate data and train the RNN
+
+The standalone `EINT_system_simulation.slx` now reads `sim_u1`…`sim_u4` from
+workspace sources. Previously its motors were driven by fixed demonstration
+steps, so the generators' random inputs had no effect. Both the canonical
+model and the team's `matlab_files/` copy have been repaired. UAV physics is
+unchanged. The PID model needed from `origin/main` is copied into
+`src/drone/plant/EINT_system_simulationPID.slx`; the `main` branch is unchanged.
+
+In MATLAB, from the repository root:
+
+```matlab
+addpath('data/data_generator');
+generate_training_data('z', fullfile(pwd,'data','generated_data'), 50, 8, 0);
+generate_training_data('z_psi', fullfile(pwd,'data','generated_data'), 50, 8, 0);
+```
+
+The generator uses Ts=0.05 s and writes headerless CSVs with one trajectory per
+row: four interleaved motor commands and all 18 interleaved physical states.
+A JSON file records the schema. It checks that different episodes actually
+excite acceleration and, for z+ψ, yaw acceleration. Legacy scalar generators
+also provide all four workspace signals at the control period.
 
 ```sh
-python src/main_model.py \
-  --input-csv data/initial_data/bdd_in_mat_05.csv \
-  --target-csv data/initial_data/bdd_out_mat_05.csv \
-  --steps 200 --output-dir results/model/initial_data
+python src/model/training/train.py --mode z \
+  --inputs data/generated_data/z_inputs.csv \
+  --outputs data/generated_data/z_outputs.csv \
+  --input-format motors --output-format plant --onnx
+python src/model/training/train.py --mode z_psi \
+  --inputs data/generated_data/z_psi_inputs.csv \
+  --outputs data/generated_data/z_psi_outputs.csv \
+  --input-format motors --output-format plant --onnx
 ```
 
-Inputs are headerless CSVs with one trajectory per row; trailing commas are
-accepted. Measurements may include sensor errors. The mains use the saved
-altitude model's normalization constants; replacement checkpoints need the
-same contract or their own training statistics.
+The callable trainer preserves trajectory boundaries, splits training/test
+trajectories, and saves normalization learned from training data in `rnn.pt`.
+The z model has a 32-unit tanh RNN and linear az head; z+ψ has 64 units and a
+linear [az, wdotz] head. Four motors are converted to
+[thrust, roll, pitch, yaw] using the team's mixer. Scalar z training requires
+equal motor commands. `--input-format controls` accepts already converted
+controls, and `--output-format selected` accepts acceleration outputs directly.
+The supplied `bdd_in_mat_05.csv` / `bdd_out_mat_05.csv` pair can train z using
+these defaults. `--output-format z_state` accepts interleaved [z,vz,az].
 
-`main_z.py` defaults to PPO. Its mission is 0 m until
-2 s, 2 m until 6 s, then landing at −0.3 m, with a 10 s limit. Observations
-contain only current altitude error, velocity and acceleration. The policy
-has no access to the mission schedule.
+Use `--epochs`, `--batch-size`, `--device cpu|cuda`, `--seed`, `--output-dir`
+and `--max-trajectories` to control a run. The optional ONNX export has explicit
+hidden-state input/output and dynamic batch/sequence dimensions. Existing
+policy-compatible checkpoints are not replaced automatically. New bundles load
+through the shared loader and supply their normalization to the environments;
+new dynamics require policies trained for those dynamics.
 
-The altitude tracking reward accepts a ±0.2 m band when `z_ref > 0`.
-Inside that band the altitude penalty is zero; outside it, the penalty uses
-the distance beyond the band. Zero and negative references keep the full
-tracking error. Velocity, command, smoothness and terminal rewards are unchanged.
+`src/model/training/rnn_training.py` and `rnn_training_z_psi.py` are CLI wrappers.
+To inspect saved-model inference:
 
-Runs save `flight.png`, `trajectory.csv`, `trajectory.npz`, `metrics.json`,
-`policy.mat` and `traj_model.mat`. Use `--show` to display plots. Without an
-output directory, each run gets a directory under
-`results/altitude/<algorithm>/<timestamp>/`.
-Set `RL_MODEL` at the top of `main_z.py`, or pass `--rl-model` to choose the
-model to evaluate. Set `POLICY` at the top of `policy/training.py`, or pass
-`--policy` to choose the algorithm to train. Both default to `ppo`.
+```sh
+python src/main_model.py --mode z
+python src/main_model.py --mode z_psi --yaw-command 0.05
+python src/main_model.py --mode z --checkpoint results/model_training/<run>/rnn.pt
+```
+
+The data-cleaning and RNN inspection notebooks use portable repository paths,
+shared CSV parsing and checkpoint normalization. They support the actual
+provided dataset sizes rather than assuming 1,000 samples per trajectory.
+
+## Train RL
+
+The mains and RL notebooks use the shared JSON configs and training functions:
 
 ```sh
 python src/policy/training.py --policy ppo
 python src/policy/training.py --policy dqn
 python src/policy/training.py --policy sac
-python src/main_z.py --rl-model sac
-python src/main_z.py --rl-model sac \
-  --rnn src/model/checkpoints/rnn_z.pt \
-  --policy results/altitude/sac/<run>/training/sac_drone_rnn.zip \
-  --output-dir results/altitude/sac_replay
+python src/main_z_psi.py --train
 ```
 
-The main first uses `checkpoint` from the algorithm config when set, then
-`initial_checkpoint`.
-Otherwise it finds the latest training run under `results/altitude/<algorithm>/`,
-then falls back to a supplied checkpoint. `--policy PATH` overrides this selection.
+`--steps` and `--seed` override the selected config for that run; resolved
+settings, checkpoint selection and TensorBoard events are recorded. Training
+runs the requested budget, rounded to the algorithm's collection block, without
+reward-threshold stopping. It saves both the final agent and the selected agent;
+later training can regress. Evaluation frequency is expressed in total
+transitions and divided by the environment count for the SB3 callback.
 
-The training script and main load `src/policy/config/<algorithm>.json`;
-`--config` selects another file for that algorithm. Explicit `--steps` and
-`--seed` arguments override
-its values. Resolved settings are saved as `training/<algo>_config.json`
-beside each run's checkpoints and monitor logs. These snapshots can also be
-passed to `--config`. All RL notebooks load the same algorithm configs for
-timestep budgets, environment counts, seeds and model parameters. The comparison
-notebooks also load DQN's command grid from its config; PPO and SAC use the shared
-training functions.
+The preserved settings are PPO z 700,000 steps / 10 environments, PPO z+ψ
+1,500,000 / 8, DQN 500,000 / 10, and SAC 500,000 / 4. DQN retains its successful
+n_steps=3, tau=0.1, train_freq=5 and gradient_steps=−1. SAC retains
+train_freq=4 and gradient_steps=4. The saved SAC continuation begins at the
+327,680-step checkpoint with a new replay buffer and a 2,000-transition warmup;
+its configured replay checkpoint is the selected 389,120-step agent.
+Use `--from-scratch` with SAC training for an independent comparison. These are
+algorithm-specific settings, not a claim of equal optimization budgets.
 
-All three configs request 500,000 total steps with discount 0.99. DQN and PPO
-use 10 training environments; SAC restores its successful `ztol02` run's 4
-environments. DQN restores the successful run's `n_steps=3`, `tau=0.1`,
-`max_grad_norm=10`, `train_freq=5` and `gradient_steps=-1`: 50 collected
-transitions are followed by 50 gradient updates after its 1,000-step warmup.
-DQN and SAC use a 100,000-transition replay buffer, batches of 128 and two
-hidden layers of 64 units. Their learning settings are algorithm-specific.
-SAC restores `train_freq=4` and `gradient_steps=4`: 16 transitions before
-4 updates. Matching only that update ratio with 10 environments did not
-reproduce the successful policy. Its warmup is 2,000 transitions.
+The rotation policy saves its observation divisors and affine action mapping.
+Python and MATLAB apply exactly those transformations. The raw motor mixer is
+[thrust+yaw, thrust−yaw, thrust+yaw, thrust−yaw]. Yaw is unwrapped so that zero
+heading does not count as completing a full turn.
 
-For DQN and SAC, `eval_freq` in the JSON config is measured in total environment
-transitions (5,000 for DQN and 20,480 for SAC), divided by `n_envs` for the SB3 callback.
-For altitude training, SAC defaults to the same fixed 2 m mission as DQN in
-the notebooks and the main. Set `curriculum_difficulty` in its config or pass `--curriculum K`
-to opt into the altitude curriculum. Evaluation saves checkpoints without
-stopping training on a reward threshold.
-
-The restored DQN checkpoint lands at 7.75 s; an independent reproduction
-matched all 75 evaluations through 375,000 transitions exactly. Its restored
-run is under `results/altitude/dqn/20261106_restored_baseline/`.
-SAC now starts from `results/altitude/sac/20261105_202000_ztol02/training/best_model.zip`
-at 327,680 steps. Replaying it reproduces the saved trajectory exactly: it
-peaks at 2.090 m and lands at 7.45 s with vertical speed -0.329 m/s. The same
-run's final 500,000-step policy crashes; it is not the selected starting policy.
-The replay and final-policy comparison are under
-`results/altitude/sac/20261106_ztol_baseline_verification/`.
-
-SAC's `initial_checkpoint` is shared by the altitude notebook and main for
-further training. Training loads its weights and optimizer state,
-evaluates it before any updates, and includes it in best-checkpoint selection.
-It still runs the full requested budget. The 500,000-step target includes the
-starting policy's 327,680 steps, leaving 172,320 new transitions. The old zip
-does not contain a replay buffer, so a new buffer receives 2,000 warmup
-transitions before updates; this is a warm start, not an exact continuation.
-Run with `--from-scratch` for an independent 500,000-step SAC comparison, or
-set `initial_checkpoint` to null. The rotation notebook starts SAC from scratch
-because the altitude policy has incompatible observations and actions.
-
-Continuing this baseline to 500,000 total steps produced a better selected
-checkpoint at 389,120 steps: landing at 7.55 s, return -70.05 (previously -215.93),
-altitude MAE 0.365 m (previously 0.375 m), and RMS command changes 1.896
-(previously 2.096). The shared config's `checkpoint` selects it for replay in
-the main and altitude notebook. Results, final-policy evaluation and verification
-are under `results/altitude/sac/20261106_ztol_warm_start_500k/`. The final policy
-times out: later training still regresses, so this does not establish stable
-SAC convergence. The original checkpoint remains the training starting point.
-
-The unsuccessful later SAC experiments are preserved under
-`results/altitude/sac/20261106_recovered_baseline/` and
-`results/policy/sac_recovery_20261106/`; they no longer override this baseline.
-
-| Algorithm | Collective command | Exploration |
-| --- | --- | --- |
-| PPO | Continuous, −3 to 3 | Existing Gaussian policy settings |
-| DQN | 61 values, −3 to 3 in steps of 0.1 | Epsilon decreases from 1 to 0.05 over the full training run |
-| SAC | Continuous, −3 to 3 | State-dependent noise and learned entropy coefficient, initially 0.05 |
-
-DQN checkpoints require the accompanying `commands.npy` in the same
-directory. Evaluation plots, trajectory files and MATLAB exports contain
-physical commands, not DQN indices. Saved checkpoints for all three algorithms
-are available to the main.
-
-Training may round the budget up to a complete rollout or collection block.
-Training selects the best checkpoint when available and always saves the
-final `<algorithm>_drone_rnn.zip`. The selected checkpoint is exported as
-`training/policy.mat`, with its mission and model trajectory in
-`training/traj_model.mat`. Training also evaluates that checkpoint and saves
-flight plots and metrics in the run root.
-The main also retains `--train` as a convenience; `--train` and `--policy`
-are mutually exclusive. Supplied weights are preserved.
-
-Training also saves `learning_curve.png` and TensorBoard events under
-`training/tensorboard/<ALGO>_1/` (the suffix increments when reusing a directory).
-`training.py` writes TensorBoard logs automatically, but does not start the
-dashboard or open a browser. In a second terminal, with the same Python
-environment activated and the repository as the current directory, run:
+To view training logs:
 
 ```sh
 python -m tensorboard.main --logdir results --port 6006
 ```
 
-Open [http://localhost:6006](http://localhost:6006/#scalars) in your browser for
-episode rewards, losses and evaluation metrics. You can start TensorBoard
-before training and leave it running; new logs appear as training progresses.
-Evaluation metrics appear after 20,480 training steps.
-Both mains accept absolute invocation paths; explicit relative arguments use
-the current working directory.
+## MATLAB exports and checks
 
-## MATLAB
+Each main writes `policy.mat`, `traj_model.mat`, and `rnn.mat` alongside its
+Python plots, trajectory and metrics. The policy file contains weights,
+activations, observation scaling, physical action scaling/clipping, mission
+samples, and independent golden observations/actions. DQN exports its command
+grid; SAC exports its deterministic mean action. The RNN export includes its
+recurrence, linear head and physical normalization with golden predictions.
 
-When `matlab` is on `PATH`, `main_z.py` runs the exported policy on the
-Simulink plant automatically in batch mode. It saves the MATLAB console
-output to `matlab.log` in the Python run directory and records the execution
-status in `metrics.json`. Check that log if MATLAB reports a failure.
-Without MATLAB, the main saves the export and prints the command to run on
-a machine with MATLAB and Simulink.
-
-To run the plant evaluation manually from the repository root:
+Run manually from the repository root:
 
 ```matlab
 addpath('src/drone/closed_loop');
-out = EINT_RL_eval(fullfile(pwd, 'results', 'altitude', 'demo'), 0.0);
+folder = fullfile(pwd,'results','altitude_psi','demo');
+check_policy_export(folder);
+check_rnn_export(folder);
+EINT_RL_eval2(folder, 0.0); % six observations / two controls
+% EINT_RL_eval(folder, 0.0) selects either mission from policy.mat.
 ```
 
-This replays the exported policy against Python measurements, then runs
-`EINT_RL_closed_loop.slx` with the standalone plant. Results go under
-`results/closed_loop/<algorithm>/<run>/`:
+`EINT_RL_eval` selects `EINT_RL_closed_loop.slx` or
+`EINT_RL_closed_loop_2.slx`. It saves all 18 plant states, references and motor
+commands in `trajectory.csv` and `traj_simulink.mat`, plus altitude, yaw and
+state figures. A third argument chooses the output directory; a fourth `false`
+skips figures. It does not save changes to the closed-loop source models.
+The mains also write `matlab_status.json`, `run_matlab.m` and `matlab.log`.
+A completed simulation that violates touchdown criteria is `mission_failed`.
 
-- `traj_simulink.mat`: simulation output and plant signals.
-- `trajectory.csv`: all 18 physical states, command and reference.
-- `simulink_altitude.png` and `.fig`: altitude tracking and command.
-- `scope_angles.png` and `.fig`: yaw, pitch and roll.
-- `scope_states.png` and `.fig`: plant state traces.
+## Layout and validation
 
-The checked-in diagram has no Scope blocks; these figures plot the recorded
-plant outputs. Pass a third argument to `EINT_RL_eval` to choose another
-results directory. For a training run, pass its `training/` folder containing
-the exported MAT files.
+`src/model/` contains dynamics loading/training/export and model notebooks;
+`src/policy/` contains shared configs, training, evaluation/export and RL
+notebooks. `src/drone/plant/` is the canonical plant location;
+`src/drone/closed_loop/` contains its deployment adapters and numerical checks.
+The incoming team's `matlab_files/`, `simulation_3d/` and notebooks remain
+available. `data/initial_data/` holds supplied measurements, while generated
+CSVs and run artifacts go in `data/generated_data/` and `results/`.
+Tensor storage directories inside extracted PyTorch checkpoints are not CSV
+training datasets and must stay beside `data.pkl`, `version` and `byteorder`.
 
-The export includes mission samples and checks policy outputs against
-Stable-Baselines3. Commands use physical units: Python normalizes once before
-RNN inference; MATLAB applies policy outputs directly to the plant. For DQN,
-MATLAB selects the largest Q-value and maps its index through the exported grid.
+Run the interface regression suite with:
 
-The second argument is noise gain; use 0.0 for comparison. The existing plant
-references `seed_theta` for pitch noise and runs the full horizon, including
-after Python would stop at ground contact. MATLAB execution has not been
-tested locally because the required runtimes are unavailable.
+```sh
+python -m unittest discover -s tests -p 'test_*.py'
+```
 
-## Datasets and remaining experiments
+It covers recurrent state, motor/output layouts, saved scaling, full-turn
+semantics, training metadata and complete rotation export. Integration evidence
+also includes one-epoch RNN training in both modes, short PPO/DQN/SAC training
+runs into separate output directories, notebook execution, ONNX parity and
+actual MATLAB/Simulink runs. Short training runs check execution and contracts;
+they do not establish convergence of newly trained models.
 
-Put new CSVs in `data/generated_data/`. Generation code is in
-`data/data_generator/`; Simulink models stay in `src/drone/plant/`.
-At the project's request, generator behavior is preserved: motor signals
-assigned by the scripts are not connected to the checked-in diagram, and
-`random_init.m` uses `Ts=0.00001` rather than the brief's 0.05 s.
-
-The altitude trainer needs missing `rnn_input_z.csv` and `rnn_output_z.csv`:
-1,000 commands and 3,000 interleaved `(z, vz, az)` values per trajectory.
-The initial CSVs are 3,000 × 2,000 with acceleration-only outputs and cannot
-replace them. The missing dataset/training code still needs to be supplied.
-The rotation trainer does not reconstruct its saved checkpoint architecture.
-
-The two environments stay separate to show the project's progression:
-
-| Module | Observations | Actions | Reference |
-| --- | --- | --- | --- |
-| `policy.lib.droneEnv` | Altitude error, velocity, acceleration | Collective | `z_ref` |
-| `policy.lib.droneEnvRotation` | 11 values; theta tracking disabled | `u_base`, `u_diff` | `(z_ref, phi_ref, psi_ref)` |
-
-Rotation angular predictions and the assumed `tanh` head need validation.
-The older four-motor policy/controller do not match the two-action environment.
-The current main and MATLAB exporter support altitude only. Yaw/x mains are
-pending. `rl_onnx.ipynb` needs the absent `rnn_model2.onnx`; other historical
-notebooks keep their original numerical assumptions.
-
-Existing estimator tests: `python -m unittest discover -s src/model/estimation -p test_rnn_ekf.py`.
-The optional viewer needs Meshcat: `PYTHONPATH=src python -m drone.visualization.demo`.
+Existing estimator tests:
+`python -m unittest discover -s src/model/estimation -p test_rnn_ekf.py`.
+The optional viewer needs Meshcat:
+`PYTHONPATH=src python -m drone.visualization.demo`.

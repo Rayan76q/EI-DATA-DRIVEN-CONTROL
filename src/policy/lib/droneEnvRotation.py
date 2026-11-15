@@ -11,6 +11,7 @@ import numpy as np
 import gymnasium as gym
 from gymnasium import spaces
 import torch
+from model.rnn_loader import checkpoint_parameters
 
 # Training statistics: inputs [thrust, roll, pitch, yaw], outputs [az, psi_ddot].
 MEAN_U = np.array([-1.3672e-02,  0.0000e+00,  0.0000e+00,  9.1857e-05], dtype=np.float32)
@@ -170,7 +171,7 @@ class DroneEnv(gym.Env):
 
     def __init__(self, rnn_model=None, params=PARAMS, max_steps=MAX_STEPS, integrate_z=False, mission=None):
         super().__init__()
-        self.p = params
+        self.p = checkpoint_parameters(rnn_model, params, "z_psi") if params is PARAMS else params
         self.max_steps = max_steps
         self.rnn_model = rnn_model
         self.integrate_z = integrate_z

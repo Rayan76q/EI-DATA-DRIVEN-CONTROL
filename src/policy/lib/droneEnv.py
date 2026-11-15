@@ -24,6 +24,7 @@ import numpy as np
 import gymnasium as gym
 from gymnasium import spaces
 import torch
+from model.rnn_loader import checkpoint_parameters
 
 # Normalization parameters (Z-score statistics from dataset)
 MEAN_U = -0.004098882433027029
@@ -156,7 +157,7 @@ class DroneEnv(gym.Env):
 
     def __init__(self, rnn_model=None, params=PARAMS, max_steps=MAX_STEPS, integrate_z=False, mission=None, difficulty=None):
         super().__init__()
-        self.p = params
+        self.p = checkpoint_parameters(rnn_model, params, "z") if params is PARAMS else params
         self.max_steps = max_steps
         self.rnn_model = rnn_model
         self.integrate_z = integrate_z

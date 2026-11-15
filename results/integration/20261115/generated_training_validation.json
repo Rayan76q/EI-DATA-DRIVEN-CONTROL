@@ -1,0 +1,23 @@
+{
+  "z": {
+    "status": "passed",
+    "trajectories": 3,
+    "samples_per_trajectory": 7,
+    "end_acceleration_std": [
+      0.5198720097541809
+    ],
+    "checkpoint": "results/integration/20261115/generated_rnn_z/rnn.pt",
+    "onnx_max_error": 5.960464477539063e-08
+  },
+  "z_psi": {
+    "status": "passed",
+    "trajectories": 3,
+    "samples_per_trajectory": 7,
+    "end_acceleration_std": [
+      1.2913496494293213,
+      13.356860160827637
+    ],
+    "checkpoint": "results/integration/20261115/generated_rnn_z_psi/rnn.pt",
+    "onnx_max_error": 1.4901161193847656e-07
+  }
+}

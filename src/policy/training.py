@@ -388,9 +388,11 @@ def train_ppo(
         if config.get("select_by_success"):
             selected_agent.dynamics_sha256 = resolved_config["metadata"]["dynamics_sha256"]
             selected_agent.save(checkpoint_path)
-        export_env = env_class(rnn_model=rnn_model, mission=mission)
+        export_env = make_training_env()
         try:
-            if export_env.observation_space.shape == (3,) and export_env.action_space.shape == (1,):
+            if (export_env.observation_space.shape, export_env.unwrapped.action_space.shape) in {
+                ((3,), (1,)), ((6,), (2,)),
+            }:
                 policy_path, trajectory_path = export_for_matlab(selected_agent, export_env, output_dir)
                 resolved_config["metadata"]["matlab_export"] = {
                     "status": "exported", "policy": str(policy_path.resolve()),
@@ -399,9 +401,9 @@ def train_ppo(
             else:
                 resolved_config["metadata"]["matlab_export"] = {
                     "status": "unsupported_environment",
-                    "reason": "MATLAB export requires 3 altitude observations and 1 action",
+                    "reason": "MATLAB export supports altitude (3/1) and altitude/yaw (6/2)",
                 }
-                print("MATLAB export skipped: only the altitude environment is supported")
+                print("MATLAB export skipped: unsupported observation/action signature")
         finally:
             export_env.close()
         config_snapshot.write_text(json.dumps(resolved_config, indent=2) + "\n")

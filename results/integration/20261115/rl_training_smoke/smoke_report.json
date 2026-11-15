@@ -1,0 +1,23 @@
+{
+  "z_ppo": {
+    "checkpoint": "results/integration/20261115/rl_training_smoke/z_ppo/ppo_drone_rnn.zip",
+    "selected_steps": 2560,
+    "actual_timesteps": 2560
+  },
+  "z_dqn": {
+    "checkpoint": "results/integration/20261115/rl_training_smoke/z_dqn/dqn_drone_rnn.zip",
+    "updates": 100,
+    "actual_timesteps": 1100
+  },
+  "z_sac": {
+    "checkpoint": "results/integration/20261115/rl_training_smoke/z_sac/best_model.zip",
+    "selected_steps": 327680,
+    "actual_timesteps": 329696
+  },
+  "z_psi_ppo": {
+    "checkpoint": "results/integration/20261115/rl_training_smoke/z_psi_ppo/best_success.zip",
+    "selected_steps": 268288,
+    "initial_steps": 266240,
+    "actual_timesteps": 268288
+  }
+}

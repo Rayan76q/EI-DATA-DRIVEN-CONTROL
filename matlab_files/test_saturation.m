@@ -8,9 +8,7 @@ clc; clear; close all;
 disp('Initialisation des variables du workspace...');
 random_init; 
 
-if ~exist('Ts', 'var')
-    Ts = 0.05; % Période d'échantillonnage par défaut[cite: 2]
-end
+Ts = 0.05; % Match RNN and RL sampling.
 
 T_sim = 25; % Une simulation courte de 25 secondes suffit
 t = (0:Ts:T_sim)';
@@ -25,6 +23,9 @@ u_input = u_start + (u_end - u_start) * (t / T_sim);
 % Création de l'objet timeseries attendu par le bloc "From Workspace"
 sim_input = timeseries(u_input, t);
 assignin('base', 'sim_input', sim_input);
+for motor = 1:4
+    assignin('base', sprintf('sim_u%d',motor), sim_input);
+end
 
 %% 3. Lancement rapide de la simulation
 disp('Lancement de la simulation (Mode Accelerator)...');

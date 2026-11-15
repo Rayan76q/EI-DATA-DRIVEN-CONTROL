@@ -3,7 +3,9 @@
 import io
 from pathlib import Path
 import zipfile
+from types import SimpleNamespace
 
+import numpy as np
 import torch
 from torch import nn
 
@@ -57,9 +59,42 @@ def load_rnn_model(path, *, head_activation=None):
                 if file.is_file():
                     archive.write(file, f"checkpoint/{file.relative_to(path).as_posix()}")
         buffer.seek(0)
-        weights = torch.load(buffer, map_location="cpu", weights_only=True)
+        payload = torch.load(buffer, map_location="cpu", weights_only=True)
     else:
-        weights = torch.load(path, map_location="cpu", weights_only=True)
+        payload = torch.load(path, map_location="cpu", weights_only=True)
 
+    metadata = payload.get("metadata", {}) if "state_dict" in payload else {}
+    weights = payload["state_dict"] if "state_dict" in payload else payload
+    head_activation = head_activation or metadata.get("head_activation")
     model = CheckpointRNN(weights, head_activation=head_activation)
+    model.training_metadata = metadata
     return model.eval().requires_grad_(False)
+
+
+def checkpoint_parameters(model, defaults, mode):
+    """Use saved training statistics for new models; preserve legacy defaults."""
+    metadata = getattr(model, "training_metadata", {})
+    if not metadata:
+        return defaults
+    if metadata.get("mode") != mode:
+        raise ValueError(f"This environment requires an RNN trained for {mode}")
+    normal = metadata["normalization"]
+    means = np.asarray(normal["input_mean"], dtype=np.float32)
+    scales = np.asarray(normal["input_scale"], dtype=np.float32)
+    out_mean = np.asarray(normal["output_mean"], dtype=np.float32)
+    out_scale = np.asarray(normal["output_scale"], dtype=np.float32)
+    expected = (4, 2) if mode == "z_psi" else (1, 1)
+    if (means.shape != (expected[0],) or scales.shape != means.shape
+            or out_mean.shape != (expected[1],) or out_scale.shape != out_mean.shape
+            or not all(np.isfinite(a).all() for a in [means,scales,out_mean,out_scale])
+            or np.any(scales <= 0) or np.any(out_scale <= 0)):
+        raise ValueError("Invalid RNN training normalization")
+    params = SimpleNamespace(**vars(defaults))
+    params.dt = float(metadata["dt"])
+    if mode == "z":
+        params.mean_u, params.sigma_u = float(means[0]), float(scales[0])
+    else:
+        params.mean_u, params.sigma_u = means, scales
+        params.mean_wz_dot, params.sigma_wz_dot = float(out_mean[1]),float(out_scale[1])
+    params.mean_az, params.sigma_az = float(out_mean[0]),float(out_scale[0])
+    return params

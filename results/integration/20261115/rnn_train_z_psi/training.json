@@ -1,0 +1,64 @@
+{
+  "metadata": {
+    "mode": "z_psi",
+    "dt": 0.05,
+    "normalization": {
+      "input_mean": [
+        0.9905311465263367,
+        -0.0002846105780918151,
+        -8.789648563833907e-05,
+        0.002502705901861191
+      ],
+      "input_scale": [
+        0.3026767373085022,
+        0.009126326069235802,
+        0.008125919848680496,
+        0.11781211197376251
+      ],
+      "output_mean": [
+        -3.55696439743042,
+        -0.03142000734806061
+      ],
+      "output_scale": [
+        10.72681999206543,
+        10.071211814880371
+      ]
+    },
+    "input_features": [
+      "thrust",
+      "roll",
+      "pitch",
+      "yaw"
+    ],
+    "output_features": [
+      "az",
+      "wdotz"
+    ],
+    "hidden_size": 64,
+    "head_activation": "linear",
+    "seed": 0,
+    "inputs": "/home/rayan768/CS/drone/EI-DATA-DRIVEN-CONTROL/data/generated_data/db_regime6_helico_input.csv",
+    "outputs": "/home/rayan768/CS/drone/EI-DATA-DRIVEN-CONTROL/data/generated_data/db_regime6_helico_output.csv",
+    "input_format": "motors",
+    "output_format": "plant",
+    "train_indices": [
+      2,
+      4,
+      3,
+      6,
+      5,
+      0,
+      1
+    ],
+    "test_indices": [
+      7
+    ]
+  },
+  "history": [
+    {
+      "epoch": 1,
+      "train_loss": 0.9705848693847656,
+      "test_loss": 1.2739901542663574
+    }
+  ]
+}

@@ -14,4 +14,7 @@ __pycache__/
 *.slxc
 slprj/
 *_grt_rtw/
+simulink_cache/
+simulink_codegen/
+matlab_preferences/
 

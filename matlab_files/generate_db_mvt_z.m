@@ -7,9 +7,7 @@ random_init;
 %% Paramètres de génération
 N_series = 20;               % Nombre de séries (épisodes) que tu veux générer
 T_sim = 50;                  % Durée totale de chaque simulation (secondes)
-if ~exist('Ts', 'var')
-    Ts = 0.05;               % Période d'échantillonnage par défaut
-end
+Ts = 0.05; % Match RNN and RL sampling.
 t = (0:Ts:T_sim)';           % Vecteur temps
 
 % Fichiers de sortie uniques
@@ -41,6 +39,9 @@ for s = 1:N_series
     % Envoi vers Simulink
     sim_input = timeseries(u_input, t);
     assignin('base', 'sim_input', sim_input);
+    for motor = 1:4
+        assignin('base', sprintf('sim_u%d',motor), sim_input);
+    end
 
     % Exécution de la simulation
     out = sim('EINT_system_simulation', 'StopTime', num2str(T_sim), ...

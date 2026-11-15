@@ -1,4 +1,4 @@
-function out = EINT_RL_eval(export_dir, noise_gain, results_dir)
+function out = EINT_RL_eval(export_dir, noise_gain, results_dir, make_plots)
 %EINT_RL_EVAL Replay a Python export, then fly its policy on the Simulink plant.
 %   addpath('src/drone/closed_loop');
 %   out = EINT_RL_eval('results/altitude/ppo/my_run', 0.0);
@@ -11,6 +11,7 @@ end
 if nargin < 2
     noise_gain = 0.1;
 end
+if nargin < 4, make_plots = true; end
 validateattributes(noise_gain, {'numeric'}, {'scalar', 'real', 'finite', 'nonnegative'});
 [exists, export_info] = fileattrib(export_dir);
 if ~exists || ~export_info.directory
@@ -25,7 +26,7 @@ addpath(here, plant_dir);
 previous_export = getenv('DRONE_POLICY_EXPORT_DIR');
 restore_export = onCleanup(@() setenv('DRONE_POLICY_EXPORT_DIR', previous_export));
 setenv('DRONE_POLICY_EXPORT_DIR', export_dir);
-check_controller(export_dir);
+check_policy_export(export_dir);
 P = load(fullfile(export_dir, 'policy.mat'));
 required = {'Ts', 'initial_az', 'g', 'horizon', 'mission_t', 'mission_z_ref'};
 for k = 1:numel(required)
@@ -36,9 +37,12 @@ end
 validateattributes(P.Ts, {'numeric'}, {'scalar', 'real', 'finite', 'positive'});
 validateattributes(P.horizon, {'numeric'}, {'scalar', 'real', 'finite', 'positive'});
 validateattributes(P.initial_az, {'numeric'}, {'scalar', 'real', 'finite'});
-if numel(P.action_low) ~= 1 || size(P.W1, 2) ~= 3
-    error('This entrypoint requires an altitude policy with 3 observations and 1 action.');
+rotation = numel(P.action_low) == 2 && size(P.W1, 2) == 6;
+if ~rotation && ~(numel(P.action_low) == 1 && size(P.W1, 2) == 3)
+    error('Export an altitude (3/1) or altitude/yaw (6/2) policy.');
 end
+assert(exist('sim', 'file') > 0 && exist('load_system', 'file') > 0, ...
+    'drone:SimulinkMissing', 'Install Simulink in this MATLAB installation before running the plant.');
 if nargin < 3 || isempty(results_dir)
     switch strtrim(P.output)
         case 'discrete', algorithm = 'dqn';
@@ -50,7 +54,8 @@ if nargin < 3 || isempty(results_dir)
     if any(strcmp(run_name, {'training', 'matlab'}))
         [~, run_name] = fileparts(parent_dir);
     end
-    results_dir = fullfile(project_root, 'results', 'closed_loop', algorithm, run_name);
+    if rotation, folder = 'closed_loop_z_psi'; else, folder = 'closed_loop'; end
+    results_dir = fullfile(project_root, 'results', folder, algorithm, run_name);
 end
 
 random_init;                          % initialize the plant's 18 noise seeds
@@ -59,6 +64,7 @@ T_end = double(P.horizon);
 g_noise = double(noise_gain);
 g = double(P.g);
 model_name = 'EINT_RL_closed_loop';
+if rotation, model_name = 'EINT_RL_closed_loop_2'; end
 was_loaded = bdIsLoaded(model_name);
 load_system(fullfile(here, [model_name '.slx']));
 if ~was_loaded
@@ -101,9 +107,13 @@ end
 % The first Python observation contains initial_az; match the live delay state.
 sim_input = sim_input.setBlockParameter([model_name '/Delay_az'], ...
     'InitialCondition', sprintf('%.17g', double(P.initial_az)));
-clear rl_controller
+if rotation
+    sim_input = sim_input.setBlockParameter([model_name '/Delay_wdotz'], ...
+        'InitialCondition', sprintf('%.17g', double(P.initial_wdotz)));
+end
+clear rl_controller rl_controller2
 out = sim(sim_input);
-clear rl_controller
+clear rl_controller rl_controller2
 clear restore_logging
 L = out.rl_log;                       % t, z, vz, az, u, z_ref
 if isa(L, 'timeseries')
@@ -111,7 +121,12 @@ if isa(L, 'timeseries')
 elseif isstruct(L)
     L = L.signals.values;
 end
-t = L(:, 1); z = L(:, 2); u = L(:, 5); z_ref = L(:, 6);
+t = L(:, 1); z = L(:, 2);
+if rotation
+    u = L(:, 14:17); z_ref = L(:, 18);
+else
+    u = L(:, 5); z_ref = L(:, 6);
+end
 rmse = sqrt(mean((z_ref - z).^2));
 plant_logged = out.plant_log.getElement('plant_state');
 plant_signal = plant_logged.Values;
@@ -130,27 +145,44 @@ if size(plant_state, 2) ~= numel(state_names)
 end
 [sample_t, sample_index] = unique(plant_t, 'last');
 control_state = interp1(sample_t, plant_state(sample_index, :), t, 'linear');
-trajectory = array2table([t, control_state, u, z_ref], ...
-    'VariableNames', [{'t'}, state_names, {'u_base', 'z_ref'}]);
+if rotation
+    psi_ref = interp1(P.mission_t(:), P.mission_psi_ref(:), t, 'previous', 'extrap');
+    thrust = mean(u, 2);
+    yaw = (u(:,1)-u(:,2)+u(:,3)-u(:,4))/4;
+    trajectory = array2table([t, control_state, u, thrust, yaw, z_ref, psi_ref], ...
+        'VariableNames', [{'t'}, state_names, {'u1','u2','u3','u4','thrust','yaw','z_ref','psi_ref'}]);
+else
+    trajectory = array2table([t, control_state, u, z_ref], ...
+        'VariableNames', [{'t'}, state_names, {'u_base', 'z_ref'}]);
+end
 if ~isfolder(results_dir)
     mkdir(results_dir);
 end
 % Keep raw solver-time states as well as the control-time CSV. All of these
 % values come from the Simulink plant; traj_model.mat remains the RNN replay.
-source = 'Simulink plant: EINT_RL_closed_loop/UAV (UAV_model)';
+source = ['Simulink plant: ' model_name '/UAV (UAV_model)'];
 units = {'m', 'm', 'm', 'm/s', 'm/s', 'm/s', 'm/s^2', 'm/s^2', 'm/s^2', ...
     'rad', 'rad', 'rad', 'rad/s', 'rad/s', 'rad/s', 'rad/s^2', 'rad/s^2', 'rad/s^2'};
-save(fullfile(results_dir, 'traj_simulink.mat'), 'out', 'L', 'plant_t', ...
+save(fullfile(results_dir, 'traj_simulink.mat'), 'L', 'plant_t', ...
     'plant_state', 'state_names', 'units', 'trajectory', 'Ts', 'T_end', ...
     'g_noise', 'g', 'rmse', 'source', 'export_dir', '-v7.3');
 writetable(trajectory, fullfile(results_dir, 'trajectory.csv'));
+if ~make_plots
+    fprintf('Simulink plant results saved to %s (RMSE %.3f m).\n', results_dir, rmse);
+    return
+end
 
-fig = figure('Name', 'Altitude policy on the Simulink plant');
-subplot(2, 1, 1); hold on; grid on;
+fig = figure('Name', 'Policy on the Simulink plant');
+rows = 2 + double(rotation);
+subplot(rows, 1, 1); hold on; grid on;
 plot(t, z_ref, '--', t, z, 'LineWidth', 1.2); yline(-0.3, ':');
 ylabel('z [m]'); legend('reference', 'z', 'landing platform');
 title(sprintf('Noise gain %g: RMSE %.2f m, min z %.2f m', g_noise, rmse, min(z)));
-subplot(2, 1, 2); stairs(t, u); grid on; ylabel('u'); xlabel('t [s]');
+if rotation
+    subplot(rows, 1, 2); plot(t, psi_ref, '--', t, control_state(:,12)); grid on;
+    ylabel('psi [rad]'); legend('reference','plant');
+end
+subplot(rows, 1, rows); stairs(t, u); grid on; ylabel('motor command'); xlabel('t [s]');
 exportgraphics(fig, fullfile(results_dir, 'simulink_altitude.png'));
 savefig(fig, fullfile(results_dir, 'simulink_altitude.fig'));
 
@@ -186,36 +218,4 @@ for k = 1:numel(names)
     set_param(state_port, names{k}, values{k});
 end
 set_param(model_name, 'DataLoggingOverride', override, 'Dirty', dirty);
-end
-
-
-function check_controller(export_dir)
-% Replays the measurements of traj_model.mat (the Figure 1 mission flown on your model, written by
-% export_for_matlab in track_b.ipynb) through rl_controller.m, step by step as in Simulink: the
-% mission, the observation and the command must be those of Python.
-if ~isfile(fullfile(export_dir, 'policy.mat')) || ~isfile(fullfile(export_dir, 'traj_model.mat'))
-    error('Missing policy.mat or traj_model.mat in %s. Export the policy from Python first.', export_dir);
-end
-T = load(fullfile(export_dir, 'traj_model.mat'));
-clear rl_controller
-for k = 1:numel(T.t)
-    [u, z_ref, obs] = rl_controller(T.t(k), T.z(k), T.vz(k), T.az_prev(k), T.u_prev(k));
-    where = sprintf('step %d (t = %.2f s)', k - 1, T.t(k));
-    if abs(z_ref - T.z_ref(k)) > 1e-9
-        error('%s: z_ref = %g in rl_controller.m, %g in Python: mission() differs.', where, z_ref, T.z_ref(k));
-    end
-    if numel(obs) ~= size(T.obs, 2)
-        error('observation() returns %d values in rl_controller.m, %d in Python.', numel(obs), size(T.obs, 2));
-    end
-    [e, i] = max(abs(obs(:)' - T.obs(k, :)) ./ max(1, abs(T.obs(k, :))));
-    if e > 1e-5
-        error('%s: component %d of the observation is %g in rl_controller.m, %g in Python.', ...
-              where, i, obs(i), T.obs(k, i));
-    end
-    if abs(u - T.u(k)) > 1e-4
-        error('%s: u = %g in MATLAB, %g in Python, with the same observation: export again.', where, u, T.u(k));
-    end
-end
-clear rl_controller
-fprintf('Check OK: rl_controller.m flies the policy as in Python (%d steps of traj_model.mat).\n', numel(T.t));
 end

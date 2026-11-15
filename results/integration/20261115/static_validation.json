@@ -1,0 +1,12 @@
+{
+  "python": "all src/tests files parse",
+  "notebooks_validated_compiled": [
+    "src/policy/notebooks/rl_z_angles.ipynb",
+    "src/policy/notebooks/rl_z.ipynb",
+    "src/policy/notebooks/rl_onnx.ipynb",
+    "src/model/notebooks/test_model_az_wdotz.ipynb",
+    "src/model/notebooks/dataset_cleaning.ipynb",
+    "src/model/notebooks/test_model_az.ipynb"
+  ],
+  "default_dqn_sac_exports_match_plant_tested": true
+}

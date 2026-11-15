@@ -13,6 +13,8 @@ from stable_baselines3 import PPO
 from model.rnn_loader import load_rnn_model
 from policy.lib.droneEnvRotation import DroneEnv, default_mission, run_episode
 from policy.training import ScaledControlActions, dynamics_fingerprint, load_ppo_config, raw_action, train_ppo
+from policy.export_policy import export_for_matlab
+from policy.matlab import evaluate_export
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -94,10 +96,15 @@ def main():
     selection.add_argument("--policy", type=Path, default=POLICY_PATH, help="PPO checkpoint to evaluate")
     parser.add_argument("--resume", type=Path, help="With --train: continue this PPO checkpoint to --steps total")
     parser.add_argument("--steps", type=int, help="Training steps; defaults to policy/config/ppo_z_psi.json")
-    parser.add_argument("--seed", type=int, default=load_ppo_config(PPO_CONFIG_PATH)["seed"])
+    parser.add_argument("--rnn", type=Path, default=RNN_PATH, help="Altitude/yaw dynamics checkpoint")
+    parser.add_argument("--config", type=Path, default=PPO_CONFIG_PATH, help="PPO altitude/yaw settings")
+    parser.add_argument("--seed", type=int, help="Overrides the selected config seed")
     parser.add_argument("--output-dir", type=Path, help="Override results/altitude_psi/<timestamp>")
     parser.add_argument("--show", action="store_true", help="Also display the saved plot")
+    parser.add_argument("--matlab", type=Path, help="MATLAB executable; also discovers ~/bin/matlab")
+    parser.add_argument("--skip-matlab", action="store_true", help="Evaluate and export Python only")
     args = parser.parse_args()
+    args.seed = args.seed if args.seed is not None else load_ppo_config(args.config)["seed"]
     if args.steps is not None and args.steps <= 0:
         parser.error("--steps must be positive")
     if args.resume is not None and not args.train:
@@ -115,12 +122,13 @@ def main():
         / datetime.now(ZoneInfo("Europe/Paris")).strftime("%Y%m%d_%H%M%S_%f")
     )).expanduser().resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
-    rnn = load_rnn_model(RNN_PATH)
+    rnn_path = args.rnn.expanduser().resolve()
+    rnn = load_rnn_model(rnn_path)
     if args.train:
         agent, checkpoint = train_ppo(
             rnn, default_mission, output_dir / "training", env_class=DroneEnv,
             total_timesteps=args.steps, seed=args.seed,
-            config_path=PPO_CONFIG_PATH,
+            config_path=args.config,
             initial_checkpoint=args.resume,
         )
     else:
@@ -136,14 +144,21 @@ def main():
             raise ValueError("The PPO checkpoint was trained with different RNN weights or normalization; retrain it")
         metrics = save_result(agent, env, output_dir, seed=args.seed, show=args.show)
         metrics.update(
-            algorithm="PPO", rnn_path=str(RNN_PATH), policy_path=str(checkpoint),
+            algorithm="PPO", rnn_path=str(rnn_path), policy_path=str(checkpoint),
             seed=args.seed, policy_training_steps=int(agent.num_timesteps),
             dynamics_sha256=dynamics_fingerprint(rnn, env.unwrapped.p),
         )
         (output_dir / "metrics.json").write_text(json.dumps(metrics, indent=2) + "\n")
+        export_for_matlab(agent, env, output_dir)
+        metrics["simulink"] = ({"status": "skipped"} if args.skip_matlab else
+                               evaluate_export(output_dir, output_dir, executable=args.matlab))
+        (output_dir / "metrics.json").write_text(json.dumps(metrics, indent=2) + "\n")
+        if metrics["simulink"]["status"] in {"failed", "mission_failed"}:
+            raise RuntimeError(f"MATLAB/Simulink failed; see {metrics['simulink']['log']}")
         print(f"Result: {metrics['outcome']} | return {metrics['return']:.1f}")
         print(f"Policy: {checkpoint}")
         print(f"Results: {output_dir}")
+        print(f"MATLAB/Simulink: {metrics['simulink']['status']}")
     finally:
         env.close()
 

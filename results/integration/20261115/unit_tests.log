@@ -1,0 +1,7 @@
+....Exported /tmp/tmppxkcykkq/policy.mat and /tmp/tmppxkcykkq/traj_model.mat (237 steps; command error 7.4e-08)
+Epoch 1/1: train 1.35455, test 2.76811
+....
+----------------------------------------------------------------------
+Ran 8 tests in 5.625s
+
+OK

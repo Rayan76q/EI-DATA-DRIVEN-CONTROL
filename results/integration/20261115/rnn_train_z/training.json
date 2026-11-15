@@ -1,0 +1,52 @@
+{
+  "metadata": {
+    "mode": "z",
+    "dt": 0.05,
+    "normalization": {
+      "input_mean": [
+        -0.017291506752371788
+      ],
+      "input_scale": [
+        0.5910752415657043
+      ],
+      "output_mean": [
+        -10.201776504516602
+      ],
+      "output_scale": [
+        12.098664283752441
+      ]
+    },
+    "input_features": [
+      "u"
+    ],
+    "output_features": [
+      "az"
+    ],
+    "hidden_size": 32,
+    "head_activation": "linear",
+    "seed": 0,
+    "inputs": "/home/rayan768/CS/drone/EI-DATA-DRIVEN-CONTROL/data/initial_data/bdd_in_mat_05.csv",
+    "outputs": "/home/rayan768/CS/drone/EI-DATA-DRIVEN-CONTROL/data/initial_data/bdd_out_mat_05.csv",
+    "input_format": "controls",
+    "output_format": "selected",
+    "train_indices": [
+      2,
+      4,
+      3,
+      6,
+      5,
+      0,
+      1
+    ],
+    "test_indices": [
+      7
+    ]
+  },
+  "history": [
+    {
+      "epoch": 1,
+      "train_loss": 0.9876469969749451,
+      "test_loss": 0.9459055066108704
+    }
+  ]
+}

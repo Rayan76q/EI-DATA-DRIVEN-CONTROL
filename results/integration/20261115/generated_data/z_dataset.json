@@ -1,0 +1,1 @@
+{"mode":"z","dt":0.05,"series":3,"horizon":0.3,"seed":0,"input_order":["motor1","motor2","motor3","motor4"],"output_order":["x","y","z","vx","vy","vz","ax","ay","az","phi","theta","psi","wx","wy","wz","wdotx","wdoty","wdotz"]}

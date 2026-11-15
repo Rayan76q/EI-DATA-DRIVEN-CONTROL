@@ -1,0 +1,217 @@
+{
+  "refs": {
+    "main": "d594c94d9957a4a1a7534402b2b8a3008ceca04f",
+    "origin/main": "cd6295d1933fba2e393ec8692883e2a09a13bdfd",
+    "origin/final": "48a878163d9ce2248069baaf618b9926bc7b900f"
+  },
+  "protected_files": {
+    "src/model/checkpoints/legacy_z/.data/serialization_id": {
+      "sha256": "37c9e0a8fd06f807126e8d3028e9d27f85af66eba0e3df0195bd3074a06aa3c3",
+      "preserved": true
+    },
+    "src/model/checkpoints/legacy_z/.format_version": {
+      "sha256": "6b86b273ff34fce19d6b804eff5a3f5747ada4eaa22f1d49c01e52ddb7875b4b",
+      "preserved": true
+    },
+    "src/model/checkpoints/legacy_z/.storage_alignment": {
+      "sha256": "a68b412c4282555f15546cf6e1fc42893b7e07f271557ceb021821098dd66c1b",
+      "preserved": true
+    },
+    "src/model/checkpoints/legacy_z/byteorder": {
+      "sha256": "180ca01b95f0dfdd36fbb600e51cf6e46c8ef468de56b017847886fefaf7b6f9",
+      "preserved": true
+    },
+    "src/model/checkpoints/legacy_z/data.pkl": {
+      "sha256": "db0516fe0ca4fdf47cad14d02b0f5852b0554fdc37c34ec27448e3a6710f9082",
+      "preserved": true
+    },
+    "src/model/checkpoints/legacy_z/data/0": {
+      "sha256": "5dcc19cc75a589c0aaaac9bb550b773a98d47637c417e5039149f27c088f8994",
+      "preserved": true
+    },
+    "src/model/checkpoints/legacy_z/data/1": {
+      "sha256": "d5e2dca74adb9290b4e24b976f83b8f703560a75b0beadd98e2581ff158d84df",
+      "preserved": true
+    },
+    "src/model/checkpoints/legacy_z/data/2": {
+      "sha256": "843b8e29454899bd10a0eb5f8cb9eb5f8f77977b8c7d89444f07f8ab24edf346",
+      "preserved": true
+    },
+    "src/model/checkpoints/legacy_z/data/3": {
+      "sha256": "c041def19f09af65af629f747e8fe01e61b7baa4c4691f7ce291262fac7407ad",
+      "preserved": true
+    },
+    "src/model/checkpoints/legacy_z/data/4": {
+      "sha256": "317ab4632043cfbadf0555158b6480e0913cff45eb156ca2610cbd9d3460dade",
+      "preserved": true
+    },
+    "src/model/checkpoints/legacy_z/data/5": {
+      "sha256": "231074bec25cdfbebddb50ff7af1856b4b4263d345bd5aec63e54a997550e069",
+      "preserved": true
+    },
+    "src/model/checkpoints/legacy_z/version": {
+      "sha256": "1121cfccd5913f0a63fec40a6ffd44ea64f9dc135c66634ba001d10bcf4302a2",
+      "preserved": true
+    },
+    "src/model/checkpoints/rnn_model_thrust_speeds.pt": {
+      "sha256": "62df0ec2a39c48d027cc77331c30cd906aed6fe61417ece7af35e2deb196ea7e",
+      "preserved": true
+    },
+    "src/model/checkpoints/rnn_model_z_and_angles/.data/serialization_id": {
+      "sha256": "0add9bc456f48369fa862872d6312bd08a131b3f3e10345eb243b30d95151643",
+      "preserved": true
+    },
+    "src/model/checkpoints/rnn_model_z_and_angles/.format_version": {
+      "sha256": "6b86b273ff34fce19d6b804eff5a3f5747ada4eaa22f1d49c01e52ddb7875b4b",
+      "preserved": true
+    },
+    "src/model/checkpoints/rnn_model_z_and_angles/.storage_alignment": {
+      "sha256": "a68b412c4282555f15546cf6e1fc42893b7e07f271557ceb021821098dd66c1b",
+      "preserved": true
+    },
+    "src/model/checkpoints/rnn_model_z_and_angles/byteorder": {
+      "sha256": "180ca01b95f0dfdd36fbb600e51cf6e46c8ef468de56b017847886fefaf7b6f9",
+      "preserved": true
+    },
+    "src/model/checkpoints/rnn_model_z_and_angles/data.pkl": {
+      "sha256": "4b4720e7029e93f88691791bfb75a76c4e6fe11580ac439b07d6112f9c334102",
+      "preserved": true
+    },
+    "src/model/checkpoints/rnn_model_z_and_angles/data/0": {
+      "sha256": "1277e0eda2aaec461936e4e09eb2292c04dda8f06dbccff14fa78c021e94bbc4",
+      "preserved": true
+    },
+    "src/model/checkpoints/rnn_model_z_and_angles/data/1": {
+      "sha256": "48eeed621e9ffa39eae7ee705869a88ac0ed4b4ca66c3ac5cc1e85343f0508c2",
+      "preserved": true
+    },
+    "src/model/checkpoints/rnn_model_z_and_angles/data/2": {
+      "sha256": "4582ea6a0ea53bb60fcf4e41fd67bd3a16c20bcfb30895cc2a7fb382734a6056",
+      "preserved": true
+    },
+    "src/model/checkpoints/rnn_model_z_and_angles/data/3": {
+      "sha256": "11d21c4cb740870eba86bc14154af7b0f44e5f4755ea8593d4e0cab3d145e6e6",
+      "preserved": true
+    },
+    "src/model/checkpoints/rnn_model_z_and_angles/data/4": {
+      "sha256": "a1259545878f6e2be1dd17dfd8dfb3417effbaf4d4259f0845f08faf21283b2d",
+      "preserved": true
+    },
+    "src/model/checkpoints/rnn_model_z_and_angles/data/5": {
+      "sha256": "51d4416740cf1a7db00c50d02c8bdaa23f725fdd6f25e80cf679916c33e9e2a0",
+      "preserved": true
+    },
+    "src/model/checkpoints/rnn_model_z_and_angles/data/6": {
+      "sha256": "9f66d28718aed8e48ccd07bceb20fdf4a2bf50882eebbfcbb0124cd43d1b8469",
+      "preserved": true
+    },
+    "src/model/checkpoints/rnn_model_z_and_angles/data/7": {
+      "sha256": "8d68754b850fc31f00dbd057356af78c98aa838abc588335fda8e7cd7c84632f",
+      "preserved": true
+    },
+    "src/model/checkpoints/rnn_model_z_and_angles/version": {
+      "sha256": "1121cfccd5913f0a63fec40a6ffd44ea64f9dc135c66634ba001d10bcf4302a2",
+      "preserved": true
+    },
+    "src/model/checkpoints/rnn_z.onnx": {
+      "sha256": "f74beae60f40b55024decc45dfbda86f80327542e692fc7664fd1b5d7850a71d",
+      "preserved": true
+    },
+    "src/model/checkpoints/rnn_z.pt": {
+      "sha256": "e04679e19e4e13d381b6738a84cf2326e9bb2b506d5148dd887fbe029174a632",
+      "preserved": true
+    },
+    "src/model/checkpoints/rnn_z/.data/serialization_id": {
+      "sha256": "427f2ee290a0e1ff10c785cc301be14c00d6442dc8dc304455d8c732630146be",
+      "preserved": true
+    },
+    "src/model/checkpoints/rnn_z/.format_version": {
+      "sha256": "6b86b273ff34fce19d6b804eff5a3f5747ada4eaa22f1d49c01e52ddb7875b4b",
+      "preserved": true
+    },
+    "src/model/checkpoints/rnn_z/.storage_alignment": {
+      "sha256": "a68b412c4282555f15546cf6e1fc42893b7e07f271557ceb021821098dd66c1b",
+      "preserved": true
+    },
+    "src/model/checkpoints/rnn_z/byteorder": {
+      "sha256": "180ca01b95f0dfdd36fbb600e51cf6e46c8ef468de56b017847886fefaf7b6f9",
+      "preserved": true
+    },
+    "src/model/checkpoints/rnn_z/data.pkl": {
+      "sha256": "3496deef311dd58a5145b17f4a58b48c775a8629415b6b0167d284c2c4a20be9",
+      "preserved": true
+    },
+    "src/model/checkpoints/rnn_z/data/0": {
+      "sha256": "fd54fc7e7c478edf1fa693e346e2057571f77a9aa005f473ad791bbee479c941",
+      "preserved": true
+    },
+    "src/model/checkpoints/rnn_z/data/1": {
+      "sha256": "974d8e4e03c1f198a393081e43522ee0080fcf98fa57ead8ad02af54723ec01c",
+      "preserved": true
+    },
+    "src/model/checkpoints/rnn_z/data/2": {
+      "sha256": "7bc522f65d3cee859314160ec14fd65d1b0d9a8e2fee7d0afc7f9c1b2f93dd53",
+      "preserved": true
+    },
+    "src/model/checkpoints/rnn_z/data/3": {
+      "sha256": "87a956d52a30e2e17820ab989071b8d08043c6dde16d7795f5cdae0167cb882d",
+      "preserved": true
+    },
+    "src/model/checkpoints/rnn_z/data/4": {
+      "sha256": "aa8e07d75fddfffd1a154cfdb4a37c75e012b327d261ae9273c4dced39e40711",
+      "preserved": true
+    },
+    "src/model/checkpoints/rnn_z/data/5": {
+      "sha256": "57e9f498e8f41795a6e27570d7149d38ba3c4713dcb2f9497985c1ffff4ac714",
+      "preserved": true
+    },
+    "src/model/checkpoints/rnn_z/version": {
+      "sha256": "1121cfccd5913f0a63fec40a6ffd44ea64f9dc135c66634ba001d10bcf4302a2",
+      "preserved": true
+    },
+    "src/policy/checkpoints/legacy/ppo_drone_rnn.zip": {
+      "sha256": "092e24af761a80ffc16f16e5047ae71f542896362d60418a69a86b55ace0901a",
+      "preserved": true
+    },
+    "src/policy/checkpoints/ppo_drone_rnn.zip": {
+      "sha256": "f9c971f321fafdefc1a649fe1fe546f2e81195f9ea182dcd51ae7de0194099b4",
+      "preserved": true
+    },
+    "src/policy/checkpoints/ppo_drone_thrust_speeds.zip": {
+      "sha256": "c93e101293da71965bc9d9e985ca0140dba008fe04a048a915da51b2d75b3eba",
+      "preserved": true
+    },
+    "src/policy/checkpoints/ppo_drone_z_angles.zip": {
+      "sha256": "51126508986646fa824f5a571d2ae7c4df7a80f1f1b255e5ea01c1c5564ce197",
+      "preserved": true
+    },
+    "src/policy/checkpoints/ppo_drone_z_angles_4motors.zip": {
+      "sha256": "58cb9fe210ba377a3a7db97695a9bcdf34c7434498a0fc29bb1eeb34e2ca8155",
+      "preserved": true
+    },
+    "src/policy/config/dqn.json": {
+      "sha256": "6a186af3756923bd8e24efeedefb49a1b08937ed4e9ed47a2cff6675ea8aa588",
+      "preserved": true
+    },
+    "src/policy/config/ppo.json": {
+      "sha256": "7ee094a2a9b91105a784a9343c5c570ab1ade54e3e8b08dbbbd847165a0a9bd5",
+      "preserved": true
+    },
+    "src/policy/config/ppo_z_psi.json": {
+      "sha256": "401e392c68151fab7f032b20f16097c828b1092bc6ab92c401998f1561b85ca6",
+      "preserved": true
+    },
+    "src/policy/config/sac.json": {
+      "sha256": "72a2c106f5dd614d69242bbe5d915e4fb61ad4fd85d9954aa7cfa5ea8a1ef468",
+      "preserved": true
+    },
+    "src/policy/notebooks/rl_z.ipynb": {
+      "sha256": "a45d9f60a1c5ef33675fd1d986efda871ddf559a2492964906e5503bb8eaa22f",
+      "preserved": true
+    }
+  },
+  "incoming_additions": [
+    "src/model/checkpoints/standardizations.txt: team added yaw normalization notes",
+    "src/model/checkpoints/rnn_model_robust.onnx: incoming team model"
+  ]
+}

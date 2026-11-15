@@ -1,0 +1,90 @@
+{
+  "z_ppo_default": {
+    "success": true,
+    "peak_altitude_m": 1.98297948952822,
+    "altitude_mae_m": 0.32502025400959933,
+    "sample_period_s": 0.04999999999999982,
+    "touchdown": {
+      "time_s": 8.0,
+      "z_m": -0.300299317500911,
+      "vz_m_s": 0.00881693099060749,
+      "altitude_hold_time_s": 2.5999999999999908
+    },
+    "policy": {
+      "path": "results/altitude/ppo/20261105_202000_ztol02/training/best_model.zip",
+      "sha256": "3d7f4b1435b63ceb8acb82de5044fbebf8052a04210de8aba56d5d93b3d9f242"
+    },
+    "trajectory": "main_z/plant/trajectory.csv"
+  },
+  "z_ppo_bundled": {
+    "success": true,
+    "peak_altitude_m": 1.9989805250731,
+    "altitude_mae_m": 0.3121455551610125,
+    "sample_period_s": 0.04999999999999982,
+    "touchdown": {
+      "time_s": 8.2,
+      "z_m": -0.303626356947222,
+      "vz_m_s": -0.12486731648506,
+      "altitude_hold_time_s": 2.6499999999999906
+    },
+    "policy": {
+      "path": "src/policy/checkpoints/ppo_drone_rnn.zip",
+      "sha256": "f9c971f321fafdefc1a649fe1fe546f2e81195f9ea182dcd51ae7de0194099b4"
+    },
+    "trajectory": "plant_z_ppo/trajectory.csv"
+  },
+  "z_psi_ppo": {
+    "success": true,
+    "peak_altitude_m": 1.90428129865292,
+    "altitude_mae_m": 0.3034214933370355,
+    "sample_period_s": 0.050000000000000044,
+    "touchdown": {
+      "time_s": 11.75,
+      "z_m": -0.301247423622388,
+      "vz_m_s": -0.0740301550412533,
+      "altitude_hold_time_s": 2.9000000000000026,
+      "psi_rad": 6.25886622784395,
+      "yaw_error_rad": -0.024319079335639593,
+      "yaw_rate_rad_s": 0.00893258621709185
+    },
+    "policy": {
+      "path": "src/policy/checkpoints/ppo_drone_thrust_speeds.zip",
+      "sha256": "c93e101293da71965bc9d9e985ca0140dba008fe04a048a915da51b2d75b3eba"
+    },
+    "trajectory": "main_z_psi/plant/trajectory.csv"
+  },
+  "z_dqn": {
+    "success": true,
+    "peak_altitude_m": 2.04448386050034,
+    "altitude_mae_m": 0.2706217494087807,
+    "sample_period_s": 0.04999999999999982,
+    "touchdown": {
+      "time_s": 7.3,
+      "z_m": -0.305844107704688,
+      "vz_m_s": -0.260863694761146,
+      "altitude_hold_time_s": 2.6999999999999904
+    },
+    "policy": {
+      "path": "results/altitude/dqn/20261106_restored_baseline/training/best_model.zip",
+      "sha256": "1b2e8a44bf378110bd312f647c8ec42c7a1f642b24efc082646fe380afdbad2d"
+    },
+    "trajectory": "plant_z_dqn/trajectory.csv"
+  },
+  "z_sac": {
+    "success": false,
+    "peak_altitude_m": 1.85475625060704,
+    "altitude_mae_m": 0.47247918536078004,
+    "sample_period_s": 0.04999999999999982,
+    "touchdown": {
+      "time_s": 7.0,
+      "z_m": -0.372210956730462,
+      "vz_m_s": -1.32090914781754,
+      "altitude_hold_time_s": 0.4499999999999984
+    },
+    "policy": {
+      "path": "results/altitude/sac/20261106_ztol_warm_start_500k/training/best_model.zip",
+      "sha256": "8fe2b42823ae6578fbb6fda0c66f6b9d3bf4caf71e62e5189223e8386c2a2bf8"
+    },
+    "trajectory": "plant_z_sac/trajectory.csv"
+  }
+}

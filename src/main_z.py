@@ -4,8 +4,6 @@ import argparse
 from datetime import datetime
 import json
 from pathlib import Path
-import shutil
-import subprocess
 import time
 
 import numpy as np
@@ -18,6 +16,7 @@ from policy.lib.droneEnv import DroneEnv, Z_LAND
 from policy.lib.discrete_actions import DiscreteDroneActions
 from policy.evaluation import evaluate_policy, plot_learning_curve
 from policy.export_policy import export_for_matlab
+from policy.matlab import evaluate_export
 from policy.training import (
     CONFIG_DIR, CurriculumCallback, configured_checkpoint,
     ref_mission, train_off_policy, train_ppo,
@@ -47,6 +46,8 @@ def main():
     parser.add_argument("--seed", type=int, help="Random seed; overrides the config")
     parser.add_argument("--output-dir", type=Path, help="Directory for plots, metrics, trajectories and MATLAB export")
     parser.add_argument("--show", action="store_true", help="Also display the saved plots")
+    parser.add_argument("--matlab", type=Path, help="MATLAB executable; also discovers ~/bin/matlab")
+    parser.add_argument("--skip-matlab", action="store_true", help="Evaluate and export Python only")
     args = parser.parse_args()
     if args.steps is not None and args.steps <= 0:
         parser.error("--steps must be positive")
@@ -82,9 +83,13 @@ def main():
                     continue
                 metadata = run_config.get("metadata") if isinstance(run_config, dict) else None
                 saved_checkpoint = metadata.get("checkpoint") if isinstance(metadata, dict) else None
-                if isinstance(saved_checkpoint, str) and Path(saved_checkpoint).is_file():
-                    checkpoint_path = Path(saved_checkpoint)
-                    break
+                if isinstance(saved_checkpoint, str):
+                    saved_path = Path(saved_checkpoint)
+                    # Team run snapshots can contain the original machine's absolute path.
+                    candidates = (saved_path, run_config_path.parent / saved_path.name)
+                    checkpoint_path = next((path for path in candidates if path.is_file()), None)
+                    if checkpoint_path is not None:
+                        break
         checkpoint_path = (checkpoint_path or (
             PROJECT_ROOT / "src" / "policy" / "checkpoints" / f"{args.algo}_drone_rnn.zip"
         )).expanduser().resolve()
@@ -166,29 +171,11 @@ def main():
               f"final vz {metrics['final_vertical_velocity_m_s']:.3f} m/s | "
               f"return {metrics['return']:.1f}")
         print(f"Results: {output_dir}")
-        matlab_dir = str(PROJECT_ROOT / "src" / "drone" / "closed_loop").replace("'", "''")
-        matlab_output = str(output_dir).replace("'", "''")
-        matlab_command = f"addpath('{matlab_dir}'); EINT_RL_eval('{matlab_output}', 0.0)"
-        matlab = shutil.which("matlab")
-        if matlab is None:
-            metrics["simulink"] = {"status": "unavailable", "reason": "MATLAB is not installed or not on PATH"}
-            print("Simulink not run: MATLAB is not installed or not on PATH.")
-            print(f"MATLAB: {matlab_command}")
-        else:
-            matlab_log = output_dir / "matlab.log"
-            print("Running the Simulink plant; scope exports will be saved under results/closed_loop.", flush=True)
-            with matlab_log.open("w") as log:
-                result = subprocess.run(
-                    [matlab, "-batch", matlab_command], cwd=PROJECT_ROOT,
-                    stdout=log, stderr=subprocess.STDOUT,
-                )
-            metrics["simulink"] = {
-                "status": "completed" if result.returncode == 0 else "failed",
-                "returncode": result.returncode, "log": str(matlab_log),
-            }
-            print(f"Simulink: {metrics['simulink']['status']} | log: {matlab_log}")
+        metrics["simulink"] = ({"status": "skipped"} if args.skip_matlab else
+                               evaluate_export(output_dir, output_dir, executable=args.matlab))
+        print(f"MATLAB/Simulink: {metrics['simulink']['status']}")
         (output_dir / "metrics.json").write_text(json.dumps(metrics, indent=2) + "\n")
-        if metrics["simulink"]["status"] == "failed":
+        if metrics["simulink"]["status"] in {"failed", "mission_failed"}:
             raise RuntimeError(f"Simulink failed; see {metrics['simulink']['log']}")
     finally:
         env.close()
