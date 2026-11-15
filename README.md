@@ -120,5 +120,24 @@ because it has no contact model. Reference runs use zero plant noise.
 
 The earlier RL training results remain under `results/altitude/`,
 `results/altitude_psi/` and `results/policy/`. Old source-folder logs and full
-experiment notebooks are archived there too. The optional 3D viewer has one
-copy in `src/drone/visualization/` and requires Meshcat.
+experiment notebooks are archived there too.
+
+## 3D viewer
+
+```sh
+python -m pip install meshcat
+python src/main_visualization.py
+```
+
+The viewer opens Meshcat in the browser and replays random rows among the
+first 1000 of `db_regime6_helico_output.csv`, read from the current directory.
+Rows use the 18-state layout of the generated `<mode>_outputs.csv` files; the
+viewer integrates [vx, vy, vz, wx, wy, wz] into poses. The commented lines in
+the script switch to `test_trajectory()`, `test_trajectory2()` or another
+dataset. The drone stays centered while the world and its path move past it.
+
+The code has one copy in `src/drone/visualization/`. Its `assets/drone_model2/`
+holds the textured model, based on
+["Drone"](https://sketchfab.com/3d-models/drone-ce248709dea64ec1844e8dd9b614f7c0)
+by [Renafox](https://sketchfab.com/kryik1023), licensed under
+[CC-BY-NC-4.0](http://creativecommons.org/licenses/by-nc/4.0/).
