@@ -1,0 +1,56 @@
+{
+  "checkpoint": "/home/rayan768/CS/drone/EI-DATA-DRIVEN-CONTROL/results/policy/rl_z_curriculum_seen_unseen_20261106_122810/ppo/ppo_drone_rnn.zip",
+  "policy_steps": 1500160,
+  "curriculum_heights": [
+    5.0,
+    2.0,
+    1.0,
+    0.5
+  ],
+  "actually_seen_heights": [
+    0.5,
+    1.0,
+    2.0,
+    5.0
+  ],
+  "held_out_heights": [
+    0.25,
+    0.75,
+    1.5,
+    3.0,
+    4.0,
+    6.0,
+    7.0,
+    8.0,
+    9.0
+  ],
+  "mission_timings": [
+    [
+      "standard",
+      2.0,
+      6.0
+    ],
+    [
+      "early",
+      1.5,
+      5.5
+    ],
+    [
+      "late",
+      2.5,
+      6.5
+    ],
+    [
+      "short_hover",
+      2.0,
+      5.5
+    ],
+    [
+      "long_hover",
+      2.0,
+      6.5
+    ]
+  ],
+  "deterministic_policy": true,
+  "tracking_tolerance_m": 0.2
+}

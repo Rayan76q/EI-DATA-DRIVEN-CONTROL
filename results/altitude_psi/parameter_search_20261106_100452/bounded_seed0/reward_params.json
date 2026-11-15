@@ -1,0 +1,15 @@
+{
+  "alive": 1,
+  "z_bonus": 4,
+  "psi_bonus": 4,
+  "z_cost": 0,
+  "psi_cost": 0,
+  "vz_cost": 0.1,
+  "wz_cost": 0.05,
+  "yaw_cost": 0.01,
+  "smooth_cost": 0.01,
+  "success": 100,
+  "failure": 25,
+  "scale_dt": true,
+  "bounded": true
+}

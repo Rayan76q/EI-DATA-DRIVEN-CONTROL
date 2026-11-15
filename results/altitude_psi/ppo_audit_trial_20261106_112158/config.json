@@ -1,0 +1,58 @@
+{
+  "config": {
+    "seed": 0,
+    "n_envs": 8,
+    "learning_rate": 0.0003,
+    "n_steps": 256,
+    "batch_size": 256,
+    "gamma": 0.995,
+    "gae_lambda": 0.95,
+    "n_epochs": 10,
+    "ent_coef": 0.005,
+    "vf_coef": 0.5,
+    "policy_kwargs": {
+      "net_arch": {
+        "pi": [
+          64,
+          64
+        ],
+        "vf": [
+          64,
+          64
+        ]
+      },
+      "log_std_init": -1
+    }
+  },
+  "initial_actor_bias": [
+    0.8,
+    0
+  ],
+  "initial_log_std": [
+    -1,
+    -4
+  ],
+  "mission": "hold0 until2,climb2 until5,turn2pi until8,land-.3 until10",
+  "normalization": {
+    "MEAN_U": [
+      -0.013671999797224998,
+      0.0,
+      0.0,
+      9.185700037050992e-05
+    ],
+    "SIGMA_U": [
+      1.6101000308990479,
+      0.0,
+      0.0,
+      0.11469999700784683
+    ],
+    "MEAN_AZ": -10.0084,
+    "SIGMA_AZ": 20.6563,
+    "MEAN_WZ_DOT": 0.0174,
+    "SIGMA_WZ_DOT": 10.8079
+  },
+  "rnn_sha256": "62df0ec2a39c48d027cc77331c30cd906aed6fe61417ece7af35e2deb196ea7e",
+  "frozen_env_sha256": "c2884035c4ef12a3e9790212da8d48011c6b4cb3e7acac32db411457239b142f",
+  "torch": "2.11.0+cu130",
+  "reward": "See trial_reward in this script"
+}

@@ -1,0 +1,22 @@
+MATLAB policy check passed: 155 samples, 168 probes, max error 0.
+Simulink plant results saved to /home/rayan768/CS/drone/EI-DATA-DRIVEN-CONTROL/results/integration/20261115/plant_z_dqn (RMSE 0.603 m).
+MATLAB policy check passed: 151 samples, 164 probes, max error 1.48e-06.
+Simulink plant results saved to /home/rayan768/CS/drone/EI-DATA-DRIVEN-CONTROL/results/integration/20261115/plant_z_sac (RMSE 0.720 m).
+{Error using *
+Incorrect dimensions for matrix multiplication. Check that the number of
+columns in the first matrix matches the number of rows in the second matrix. To
+operate on each element of the matrix individually, use TIMES (.*) for
+elementwise multiplication.
+
+Error in generate_training_data (line 40)
+    motors = commands * [1,1;1,-1;1,1;1,-1]';
+             ^^^^^^^^
+Error in run_remaining_checks (line 9)
+generate_training_data('z',fullfile(root,'generated_data'),3,.3,0);
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Error in run (line 100)
+evalin('caller', strcat(scriptStem, ';'));
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+} 
+Warning: maxDynamicUniformBuffersPerPipelineLayout artificially reduced from 1000000 to 16 to fit dynamic offset allocation limit.
+Warning: maxDynamicStorageBuffersPerPipelineLayout artificially reduced from 1000000 to 16 to fit dynamic offset allocation limit.

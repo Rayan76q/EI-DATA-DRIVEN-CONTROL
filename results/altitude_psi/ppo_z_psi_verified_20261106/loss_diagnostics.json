@@ -1,0 +1,14 @@
+{
+  "train/value_loss": {
+    "final": 1.3961457014083862,
+    "step": 1501184
+  },
+  "train/policy_gradient_loss": {
+    "final": -0.0008331905119121075,
+    "step": 1501184
+  },
+  "train/approx_kl": {
+    "final": 0.012604430317878723,
+    "step": 1501184
+  }
+}

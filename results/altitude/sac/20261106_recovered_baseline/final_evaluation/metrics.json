@@ -1,0 +1,13 @@
+{
+  "outcome": "crashed",
+  "landed": false,
+  "return": -1677.4891199432313,
+  "steps": 139,
+  "duration_s": 6.95,
+  "peak_altitude_m": 2.1376638412475586,
+  "final_altitude_m": -0.3366444706916809,
+  "final_vertical_velocity_m_s": -1.5365900993347168,
+  "altitude_mae_m": 0.3451860334643786,
+  "rms_delta_u": 1.2725626330825794,
+  "is_success": false
+}

@@ -1,0 +1,13 @@
+{
+  "outcome": [
+    "crashed",
+    "no_turn"
+  ],
+  "duration_s": 5.550000000000001,
+  "return_": 6.328552253544331,
+  "peak_altitude_m": 0.03220580518245697,
+  "final_yaw_rad": 0.2573705315589905,
+  "final_vz_m_s": -1.309173583984375,
+  "policy_steps": 1064960,
+  "note": "Previous saved policy tested against the current raw RNN and corrected mission/reward; historical training dynamics may differ."
+}

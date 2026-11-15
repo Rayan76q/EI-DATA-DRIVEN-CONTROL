@@ -1,0 +1,33 @@
+{
+  "checkpoint": "/home/rayan768/CS/drone/EI-DATA-DRIVEN-CONTROL/src/model/checkpoints/rnn_model_thrust_speeds.pt",
+  "mode": "z_psi",
+  "samples": 12,
+  "dt_s": 0.05,
+  "input_size": 4,
+  "output_size": 2,
+  "hidden_size": 64,
+  "input_mean": [
+    -0.013671999797224998,
+    0.0,
+    0.0,
+    9.185700037050992e-05
+  ],
+  "input_scale": [
+    1.6101000308990479,
+    1.0,
+    1.0,
+    0.11469999700784683
+  ],
+  "output_mean": [
+    -10.0084,
+    0.0174
+  ],
+  "output_scale": [
+    20.6563,
+    10.8079
+  ],
+  "final_prediction": [
+    -0.38300947499871185,
+    -0.011442179040517659
+  ]
+}

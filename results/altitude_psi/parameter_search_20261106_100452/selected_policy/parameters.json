@@ -1,0 +1,21 @@
+{
+  "reward_params": {
+    "alive_bonus": 2.0,
+    "z_bonus": 4.0,
+    "psi_bonus": 4.0,
+    "z_penalty": 0.5,
+    "psi_penalty": 0.2,
+    "vz_penalty": 0.1,
+    "wz_penalty": 0.02,
+    "yaw_effort": 0.001,
+    "smoothness": 0.005,
+    "success": 50.0,
+    "failure": 20.0
+  },
+  "profile": "gentle",
+  "policy_source": "results/altitude_psi/parameter_search_20261106_100452/gentle_seed1/best_model.zip",
+  "policy_training_seed": 1,
+  "policy_training_steps": 380000,
+  "full_mission_success": false,
+  "selection_reason": "Lower-penalty Huber reward improved survival to the complete horizon in both tested seeds. Bounded and stronger damping did not learn reliable landing. This remains a tested starting configuration, not a solved PPO mission."
+}

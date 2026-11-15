@@ -1,0 +1,5 @@
+Exported /home/rayan768/CS/drone/EI-DATA-DRIVEN-CONTROL/results/integration/20261115/main_z_psi/policy.mat and /home/rayan768/CS/drone/EI-DATA-DRIVEN-CONTROL/results/integration/20261115/main_z_psi/traj_model.mat (237 steps; command error 7.4e-08)
+Result: ('landed', 'has_turned') | return 196.0
+Policy: /home/rayan768/CS/drone/EI-DATA-DRIVEN-CONTROL/src/policy/checkpoints/ppo_drone_thrust_speeds.zip
+Results: /home/rayan768/CS/drone/EI-DATA-DRIVEN-CONTROL/results/integration/20261115/main_z_psi
+MATLAB/Simulink: completed

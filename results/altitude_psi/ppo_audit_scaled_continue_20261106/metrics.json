@@ -1,0 +1,20 @@
+{
+  "outcome": [
+    "crashed",
+    "no_turn"
+  ],
+  "success": false,
+  "return": 9.386319309473038,
+  "steps": 100,
+  "duration_s": 5.0,
+  "altitude_mae_m": 1.3014565525436774,
+  "yaw_mae_rad": 0.11502914120763308,
+  "peak_altitude_m": 0.06445552408695221,
+  "final_altitude_m": -0.30398795008659363,
+  "final_yaw_rad": -0.30647531151771545,
+  "algorithm": "PPO",
+  "rnn_path": "/home/rayan768/CS/drone/EI-DATA-DRIVEN-CONTROL/src/model/checkpoints/rnn_model_thrust_speeds.pt",
+  "policy_path": "/home/rayan768/CS/drone/EI-DATA-DRIVEN-CONTROL/results/altitude_psi/ppo_audit_scaled_continue_20261106/training/best_model.zip",
+  "seed": 0,
+  "policy_training_steps": 602112
+}

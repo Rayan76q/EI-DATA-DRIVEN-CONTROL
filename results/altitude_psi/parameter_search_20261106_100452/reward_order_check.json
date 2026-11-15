@@ -1,0 +1,32 @@
+{
+  "early_crash": {
+    "outcome": [
+      "crashed",
+      "no_turn"
+    ],
+    "duration_s": 0.25,
+    "steps": 5,
+    "returns": {
+      "minimal": -960.6230684260836,
+      "baseline": -988.1263650877546,
+      "balanced": -48.257557700686476,
+      "gentle": -18.033451872799535,
+      "bounded": -23.231852857285567
+    }
+  },
+  "feasible_success": {
+    "outcome": [
+      "landed",
+      "has_turned"
+    ],
+    "duration_s": 10.0,
+    "steps": 200,
+    "returns": {
+      "minimal": 1693.938571673052,
+      "baseline": -5797.690562982567,
+      "balanced": 135.26361390238134,
+      "gentle": 104.01520278928646,
+      "bounded": 151.2252091241526
+    }
+  }
+}

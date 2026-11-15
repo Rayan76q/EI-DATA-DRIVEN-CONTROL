@@ -1,0 +1,56 @@
+{
+  "test": "Manual raw RNN input/output phases; no optimizer or RL",
+  "dt": 0.05,
+  "duration_s": 12.0,
+  "max_acceleration_difference_vs_env": 4.809939861516455e-06,
+  "phases": [
+    {
+      "name": "Up",
+      "duration_s": 2.0,
+      "thrust": 2.3,
+      "yaw": 0.0,
+      "mean_az": 2.639140132341283,
+      "mean_psi_ddot": -0.0005572460202127713
+    },
+    {
+      "name": "Neutral",
+      "duration_s": 2.0,
+      "thrust": 1.54,
+      "yaw": 0.0,
+      "mean_az": 0.5004487076306352,
+      "mean_psi_ddot": -0.02989120481278748
+    },
+    {
+      "name": "Turn +yaw",
+      "duration_s": 2.0,
+      "thrust": 1.54,
+      "yaw": 0.5,
+      "mean_az": -1.7951283157359057,
+      "mean_psi_ddot": 0.28358660729162394
+    },
+    {
+      "name": "Down",
+      "duration_s": 2.0,
+      "thrust": 0.8,
+      "yaw": 0.0,
+      "mean_az": -4.117368152006491,
+      "mean_psi_ddot": 0.2344219370127097
+    },
+    {
+      "name": "Turn -yaw",
+      "duration_s": 2.0,
+      "thrust": 1.54,
+      "yaw": -0.5,
+      "mean_az": 1.531378863324971,
+      "mean_psi_ddot": -0.6183613070638291
+    },
+    {
+      "name": "Neutral",
+      "duration_s": 2.0,
+      "thrust": 1.54,
+      "yaw": 0.0,
+      "mean_az": 0.23713180419892152,
+      "mean_psi_ddot": -0.3197198328335956
+    }
+  ]
+}

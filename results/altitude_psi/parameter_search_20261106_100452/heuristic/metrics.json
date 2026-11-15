@@ -1,0 +1,20 @@
+{
+  "outcome": [
+    "landed",
+    "has_turned"
+  ],
+  "success": true,
+  "steps": 200,
+  "duration_s": 10.0,
+  "planning_runtime_s": 52.292261092000444,
+  "altitude_mae_m": 0.7242108628004792,
+  "yaw_mae_rad": 0.9393517820612365,
+  "peak_altitude_m": 3.0995399951934814,
+  "final_altitude_m": -0.3020295202732086,
+  "final_vz_m_s": -0.2995651960372925,
+  "final_yaw_rad": 6.277002811431885,
+  "final_yaw_rate_rad_s": 0.05508643388748169,
+  "return_": -2218.6851345151663,
+  "controller": "Open-loop RNN-planned baseline; unchanged frozen RNN, no RL",
+  "iterations": 6000
+}

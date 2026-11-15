@@ -1,0 +1,56 @@
+{
+  "total_timesteps": 329696,
+  "seed": 0,
+  "n_envs": 4,
+  "sac": {
+    "learning_rate": 0.0001,
+    "buffer_size": 100000,
+    "learning_starts": 2000,
+    "batch_size": 128,
+    "gamma": 0.99,
+    "tau": 0.005,
+    "train_freq": 4,
+    "gradient_steps": 4,
+    "n_steps": 1,
+    "ent_coef": "auto_0.05",
+    "target_update_interval": 1,
+    "target_entropy": "auto",
+    "use_sde": true,
+    "sde_sample_freq": 4,
+    "use_sde_at_warmup": false,
+    "policy_kwargs": {
+      "net_arch": [
+        64,
+        64
+      ],
+      "log_std_init": -2.0
+    }
+  },
+  "eval_freq": 20480,
+  "curriculum_difficulty": null,
+  "initial_checkpoint": "/home/rayan768/CS/drone/EI-DATA-DRIVEN-CONTROL/results/altitude/sac/20261105_202000_ztol02/training/best_model.zip",
+  "metadata": {
+    "algorithm": "SAC",
+    "source_config": "/home/rayan768/CS/drone/EI-DATA-DRIVEN-CONTROL/src/policy/config/sac.json",
+    "environment": "policy.lib.droneEnv.DroneEnv",
+    "stable_baselines3": "2.9.2",
+    "torch": "2.11.0+cu130",
+    "warm_start": {
+      "checkpoint": "/home/rayan768/CS/drone/EI-DATA-DRIVEN-CONTROL/results/altitude/sac/20261105_202000_ztol02/training/best_model.zip",
+      "initial_timesteps": 327680,
+      "replay_buffer_restored": false,
+      "fresh_replay_warmup_transitions": 2000,
+      "updates_start_after_total_timesteps": 329680,
+      "initial_eval_return": -215.928375
+    },
+    "actual_timesteps": 329696,
+    "new_timesteps": 2016,
+    "checkpoint": "/home/rayan768/CS/drone/EI-DATA-DRIVEN-CONTROL/results/integration/20261115/rl_training_smoke/z_sac/best_model.zip",
+    "matlab_export": {
+      "status": "exported",
+      "policy": "/home/rayan768/CS/drone/EI-DATA-DRIVEN-CONTROL/results/integration/20261115/rl_training_smoke/z_sac/policy.mat",
+      "trajectory": "/home/rayan768/CS/drone/EI-DATA-DRIVEN-CONTROL/results/integration/20261115/rl_training_smoke/z_sac/traj_model.mat"
+    }
+  },
+  "checkpoint": "/home/rayan768/CS/drone/EI-DATA-DRIVEN-CONTROL/results/integration/20261115/rl_training_smoke/z_sac/best_model.zip"
+}

@@ -1,0 +1,18 @@
+{
+  "outcome": "landed",
+  "landed": true,
+  "return": 606.982658855617,
+  "steps": 155,
+  "duration_s": 7.75,
+  "peak_altitude_m": 2.0751428604125977,
+  "final_altitude_m": -0.30011069774627686,
+  "final_vertical_velocity_m_s": -0.04999994486570358,
+  "altitude_mae_m": 0.31076048544277585,
+  "rms_delta_u": 0.4354456303869384,
+  "algorithm": "DQN",
+  "policy_path": "/home/rayan768/CS/drone/EI-DATA-DRIVEN-CONTROL/results/altitude/dqn/20261106_restored_baseline/training/best_model.zip",
+  "policy_training_steps": 495000,
+  "trained_this_run": false,
+  "is_success": true,
+  "source": "restored successful full-budget checkpoint"
+}

@@ -1,0 +1,15 @@
+{
+  "outcome": "landed",
+  "landed": true,
+  "return": -70.04779344797134,
+  "steps": 151,
+  "duration_s": 7.550000000000001,
+  "peak_altitude_m": 2.096769094467163,
+  "final_altitude_m": -0.30033960938453674,
+  "final_vertical_velocity_m_s": -0.4305187165737152,
+  "altitude_mae_m": 0.365499966821035,
+  "rms_delta_u": 1.8963177433195768,
+  "policy_training_steps": 389120,
+  "optimizer_updates": 96272,
+  "is_success": true
+}

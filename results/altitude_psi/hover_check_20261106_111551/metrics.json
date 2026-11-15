@@ -1,0 +1,47 @@
+{
+  "checkpoint_sha256": "62df0ec2a39c48d027cc77331c30cd906aed6fe61417ece7af35e2deb196ea7e",
+  "hover_thrust": 1.5575,
+  "gains": {
+    "z": 2.0,
+    "vz": 1.5,
+    "az": 0.25
+  },
+  "cases": [
+    {
+      "target_m": 0.0,
+      "duration_s": 10.0,
+      "minimum_z_m": -0.2554360330104828,
+      "final_z_m": -1.5765983334858902e-05,
+      "final_vz_m_s": -3.483966537487504e-08,
+      "max_altitude_error_after_3s_m": 0.0004232655337546021,
+      "outcome": [
+        "timeout",
+        "no_turn"
+      ]
+    },
+    {
+      "target_m": 1.0,
+      "duration_s": 10.0,
+      "minimum_z_m": -0.23531480133533478,
+      "final_z_m": 0.9999842047691345,
+      "final_vz_m_s": 9.878144524577692e-09,
+      "max_altitude_error_after_3s_m": 0.0019932985305786133,
+      "outcome": [
+        "timeout",
+        "no_turn"
+      ]
+    },
+    {
+      "target_m": 2.0,
+      "duration_s": 10.0,
+      "minimum_z_m": -0.23531480133533478,
+      "final_z_m": 1.9999840259552002,
+      "final_vz_m_s": 3.674447270896053e-07,
+      "max_altitude_error_after_3s_m": 0.0033380985260009766,
+      "outcome": [
+        "timeout",
+        "no_turn"
+      ]
+    }
+  ]
+}

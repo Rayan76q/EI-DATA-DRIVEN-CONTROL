@@ -1,0 +1,178 @@
+[
+  {
+    "outcome": [
+      "landed",
+      "has_turned"
+    ],
+    "success": true,
+    "return": 197.40676480531693,
+    "steps": 223,
+    "duration_s": 11.15,
+    "altitude_mae_m": 0.27419968399766315,
+    "yaw_mae_rad": 0.27917566307377967,
+    "peak_altitude_m": 0.9264344573020935,
+    "altitude_hold_time_s": 3.599999999999995,
+    "minimum_altitude_m": -0.301254004240036,
+    "final_altitude_m": -0.301254004240036,
+    "final_vz_m_s": -0.07088758796453476,
+    "final_yaw_rad": 6.259226322174072,
+    "final_yaw_speed_rad_s": 0.008755390532314777,
+    "height_target_m": 1,
+    "turn_target_rad": 6.283185307179586,
+    "name": "z1_yaw+360"
+  },
+  {
+    "outcome": [
+      "landed",
+      "has_turned"
+    ],
+    "success": true,
+    "return": 195.9661935083568,
+    "steps": 237,
+    "duration_s": 11.850000000000001,
+    "altitude_mae_m": 0.4705934618973027,
+    "yaw_mae_rad": 0.2808914895643047,
+    "peak_altitude_m": 1.9009003639221191,
+    "altitude_hold_time_s": 2.849999999999998,
+    "minimum_altitude_m": -0.301291286945343,
+    "final_altitude_m": -0.301291286945343,
+    "final_vz_m_s": -0.07085467129945755,
+    "final_yaw_rad": 6.259291648864746,
+    "final_yaw_speed_rad_s": 0.008557000197470188,
+    "height_target_m": 2,
+    "turn_target_rad": 6.283185307179586,
+    "name": "z2_yaw+360"
+  },
+  {
+    "outcome": [
+      "landed",
+      "has_turned"
+    ],
+    "success": true,
+    "return": 192.27323426830117,
+    "steps": 246,
+    "duration_s": 12.3,
+    "altitude_mae_m": 0.6689431362035798,
+    "yaw_mae_rad": 0.2861196245085803,
+    "peak_altitude_m": 2.88130521774292,
+    "altitude_hold_time_s": 2.549999999999999,
+    "minimum_altitude_m": -0.30170148611068726,
+    "final_altitude_m": -0.30170148611068726,
+    "final_vz_m_s": -0.07046462595462799,
+    "final_yaw_rad": 6.259342193603516,
+    "final_yaw_speed_rad_s": 0.00849895365536213,
+    "height_target_m": 3,
+    "turn_target_rad": 6.283185307179586,
+    "name": "z3_yaw+360"
+  },
+  {
+    "outcome": [
+      "landed",
+      "has_turned"
+    ],
+    "success": true,
+    "return": 196.92971800640225,
+    "steps": 242,
+    "duration_s": 12.100000000000001,
+    "altitude_mae_m": 0.493941936107768,
+    "yaw_mae_rad": 0.27805000011826486,
+    "peak_altitude_m": 2.0423946380615234,
+    "altitude_hold_time_s": 2.849999999999998,
+    "minimum_altitude_m": -0.30211228132247925,
+    "final_altitude_m": -0.30211228132247925,
+    "final_vz_m_s": -0.07006893306970596,
+    "final_yaw_rad": -6.306992530822754,
+    "final_yaw_speed_rad_s": 0.008473079651594162,
+    "height_target_m": 2,
+    "turn_target_rad": -6.283185307179586,
+    "name": "z2_yaw-360"
+  },
+  {
+    "outcome": [
+      "landed",
+      "has_turned"
+    ],
+    "success": true,
+    "return": 200.7597811818123,
+    "steps": 238,
+    "duration_s": 11.9,
+    "altitude_mae_m": 0.47376793991743005,
+    "yaw_mae_rad": 0.16711792912034273,
+    "peak_altitude_m": 1.9003510475158691,
+    "altitude_hold_time_s": 2.849999999999998,
+    "minimum_altitude_m": -0.3024967908859253,
+    "final_altitude_m": -0.3024967908859253,
+    "final_vz_m_s": -0.06970997899770737,
+    "final_yaw_rad": 3.1178410053253174,
+    "final_yaw_speed_rad_s": 0.008416269905865192,
+    "height_target_m": 2,
+    "turn_target_rad": 3.141592653589793,
+    "name": "z2_yaw+180"
+  },
+  {
+    "outcome": [
+      "landed",
+      "has_turned"
+    ],
+    "success": true,
+    "return": 201.26057839393616,
+    "steps": 240,
+    "duration_s": 12.0,
+    "altitude_mae_m": 0.48427785339610024,
+    "yaw_mae_rad": 0.1611726569985267,
+    "peak_altitude_m": 1.955145001411438,
+    "altitude_hold_time_s": 2.849999999999998,
+    "minimum_altitude_m": -0.30193620920181274,
+    "final_altitude_m": -0.30193620920181274,
+    "final_vz_m_s": -0.07023444026708603,
+    "final_yaw_rad": -3.1654183864593506,
+    "final_yaw_speed_rad_s": 0.008479999378323555,
+    "height_target_m": 2,
+    "turn_target_rad": -3.141592653589793,
+    "name": "z2_yaw-180"
+  },
+  {
+    "outcome": [
+      "landed",
+      "has_turned"
+    ],
+    "success": true,
+    "return": 205.7226446568966,
+    "steps": 226,
+    "duration_s": 11.3,
+    "altitude_mae_m": 0.28118033871977727,
+    "yaw_mae_rad": 0.03270927911783482,
+    "peak_altitude_m": 0.9196181893348694,
+    "altitude_hold_time_s": 3.599999999999995,
+    "minimum_altitude_m": -0.30302029848098755,
+    "final_altitude_m": -0.30302029848098755,
+    "final_vz_m_s": -0.06918995082378387,
+    "final_yaw_rad": -0.023673461750149727,
+    "final_yaw_speed_rad_s": 0.008223766461014748,
+    "height_target_m": 1,
+    "turn_target_rad": 0,
+    "name": "z1_yaw+0"
+  },
+  {
+    "outcome": [
+      "landed",
+      "has_turned"
+    ],
+    "success": true,
+    "return": 199.39242056384683,
+    "steps": 247,
+    "duration_s": 12.350000000000001,
+    "altitude_mae_m": 0.6780525582325966,
+    "yaw_mae_rad": 0.06333271349459295,
+    "peak_altitude_m": 2.9109535217285156,
+    "altitude_hold_time_s": 2.3999999999999995,
+    "minimum_altitude_m": -0.30145394802093506,
+    "final_altitude_m": -0.30145394802093506,
+    "final_vz_m_s": -0.07069869339466095,
+    "final_yaw_rad": -0.023875758051872253,
+    "final_yaw_speed_rad_s": 0.008536046370863914,
+    "height_target_m": 3,
+    "turn_target_rad": 0,
+    "name": "z3_yaw+0"
+  }
+]

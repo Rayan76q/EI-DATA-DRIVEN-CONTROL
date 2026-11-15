@@ -1,0 +1,22 @@
+{
+  "candidate": "damped_seed0",
+  "checkpoint": "best_model.zip",
+  "training_steps": 541760,
+  "steps": 200,
+  "duration_s": 10.0,
+  "outcome": [
+    "timeout",
+    "has_turned"
+  ],
+  "success": false,
+  "altitude_mae_m": 0.7129165671786759,
+  "yaw_mae_rad": 1.3333943043800083,
+  "peak_z": 2.1324026584625244,
+  "final_z": 1.087342619895935,
+  "final_psi": 6.155465126037598,
+  "final_vz": -0.40765470266342163,
+  "final_wz": 1.4535056352615356,
+  "climb_fraction": 0.75,
+  "turn_fraction": 0.21666666666666667,
+  "production_reward_return": 40.90036667138338
+}

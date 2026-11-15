@@ -1,0 +1,229 @@
+{
+  "task": "Fixed altitude mission: 0 m until 2 s, 2 m until 6 s, then soft landing",
+  "n_envs": 10,
+  "seed": 0,
+  "reward_and_dynamics_changed": false,
+  "evaluation_interval_transitions": 5000,
+  "selected_trial": "lr_1e4_ratio_quarter",
+  "trials": [
+    {
+      "name": "lr_1e4_multistep",
+      "requested_timesteps": 100000,
+      "evaluated_through_timesteps": 100000,
+      "evaluation_count": 20,
+      "successful_evaluations": 0,
+      "best_checkpoint_timesteps": 10000,
+      "best_return": -1010.839161,
+      "parameters": {
+        "learning_rate": 0.0001,
+        "buffer_size": 100000,
+        "learning_starts": 1000,
+        "batch_size": 128,
+        "gamma": 0.99,
+        "tau": 0.005,
+        "train_freq": 5,
+        "gradient_steps": -1,
+        "ent_coef": "auto_0.05",
+        "target_update_interval": 1,
+        "target_entropy": "auto",
+        "use_sde": true,
+        "sde_sample_freq": 4,
+        "use_sde_at_warmup": false,
+        "policy_kwargs": {
+          "net_arch": [
+            64,
+            64
+          ],
+          "log_std_init": -2.0
+        },
+        "n_steps": 3
+      },
+      "actual_timesteps": 100000,
+      "optimizer_updates": 99000,
+      "status": "complete"
+    },
+    {
+      "name": "lr_1e4_ratio_quarter",
+      "requested_timesteps": 500000,
+      "evaluated_through_timesteps": 500000,
+      "evaluation_count": 100,
+      "successful_evaluations": 1,
+      "best_checkpoint_timesteps": 50000,
+      "best_return": -486.184229,
+      "parameters": {
+        "learning_rate": 0.0001,
+        "buffer_size": 100000,
+        "learning_starts": 2000,
+        "batch_size": 128,
+        "gamma": 0.99,
+        "tau": 0.005,
+        "train_freq": 4,
+        "gradient_steps": 10,
+        "ent_coef": "auto_0.05",
+        "target_update_interval": 1,
+        "target_entropy": "auto",
+        "use_sde": true,
+        "sde_sample_freq": 4,
+        "use_sde_at_warmup": false,
+        "policy_kwargs": {
+          "net_arch": [
+            64,
+            64
+          ],
+          "log_std_init": -2.0
+        },
+        "n_steps": 1
+      },
+      "actual_timesteps": 500000,
+      "optimizer_updates": 124500,
+      "status": "complete"
+    },
+    {
+      "name": "lr_1e4_ratio_quarter_gaussian",
+      "requested_timesteps": 500000,
+      "evaluated_through_timesteps": 175000,
+      "evaluation_count": 35,
+      "successful_evaluations": 0,
+      "best_checkpoint_timesteps": 5000,
+      "best_return": -1004.453376,
+      "parameters": {
+        "learning_rate": 0.0001,
+        "buffer_size": 100000,
+        "learning_starts": 2000,
+        "batch_size": 128,
+        "gamma": 0.99,
+        "tau": 0.005,
+        "train_freq": 4,
+        "gradient_steps": 10,
+        "n_steps": 1,
+        "ent_coef": "auto_0.05",
+        "target_update_interval": 1,
+        "target_entropy": "auto",
+        "use_sde": false,
+        "sde_sample_freq": 4,
+        "use_sde_at_warmup": false,
+        "policy_kwargs": {
+          "net_arch": [
+            64,
+            64
+          ],
+          "log_std_init": -2.0
+        }
+      },
+      "status": "stopped_pilot",
+      "actual_timesteps": 175000,
+      "planned_timesteps": 500000,
+      "reason": "No successful evaluation in 175,000 transitions; retained the independently verified successful SAC candidate. Production training budget remains 500,000."
+    },
+    {
+      "name": "lr_1e4_ratio_quarter_multistep",
+      "requested_timesteps": 100000,
+      "evaluated_through_timesteps": 100000,
+      "evaluation_count": 20,
+      "successful_evaluations": 0,
+      "best_checkpoint_timesteps": 25000,
+      "best_return": -1003.346729,
+      "parameters": {
+        "learning_rate": 0.0001,
+        "buffer_size": 100000,
+        "learning_starts": 2000,
+        "batch_size": 128,
+        "gamma": 0.99,
+        "tau": 0.005,
+        "train_freq": 4,
+        "gradient_steps": 10,
+        "n_steps": 3,
+        "ent_coef": "auto_0.05",
+        "target_update_interval": 1,
+        "target_entropy": "auto",
+        "use_sde": true,
+        "sde_sample_freq": 4,
+        "use_sde_at_warmup": false,
+        "policy_kwargs": {
+          "net_arch": [
+            64,
+            64
+          ],
+          "log_std_init": -2.0
+        }
+      },
+      "actual_timesteps": 100000,
+      "optimizer_updates": 24500,
+      "status": "complete"
+    },
+    {
+      "name": "lr_1e4_ratio_quarter_tanh",
+      "requested_timesteps": 100000,
+      "evaluated_through_timesteps": 100000,
+      "evaluation_count": 20,
+      "successful_evaluations": 0,
+      "best_checkpoint_timesteps": 100000,
+      "best_return": -1003.060021,
+      "parameters": {
+        "learning_rate": 0.0001,
+        "buffer_size": 100000,
+        "learning_starts": 2000,
+        "batch_size": 128,
+        "gamma": 0.99,
+        "tau": 0.005,
+        "train_freq": 4,
+        "gradient_steps": 10,
+        "n_steps": 1,
+        "ent_coef": "auto_0.05",
+        "target_update_interval": 1,
+        "target_entropy": "auto",
+        "use_sde": true,
+        "sde_sample_freq": 4,
+        "use_sde_at_warmup": false,
+        "policy_kwargs": {
+          "net_arch": [
+            64,
+            64
+          ],
+          "log_std_init": -2.0,
+          "activation_fn": "Tanh"
+        }
+      },
+      "actual_timesteps": 100000,
+      "optimizer_updates": 24500,
+      "status": "complete"
+    },
+    {
+      "name": "lr_3e4_multistep",
+      "requested_timesteps": 100000,
+      "evaluated_through_timesteps": 100000,
+      "evaluation_count": 20,
+      "successful_evaluations": 0,
+      "best_checkpoint_timesteps": 15000,
+      "best_return": -1008.093299,
+      "parameters": {
+        "learning_rate": 0.0003,
+        "buffer_size": 100000,
+        "learning_starts": 1000,
+        "batch_size": 128,
+        "gamma": 0.99,
+        "tau": 0.005,
+        "train_freq": 5,
+        "gradient_steps": -1,
+        "ent_coef": "auto_0.05",
+        "target_update_interval": 1,
+        "target_entropy": "auto",
+        "use_sde": true,
+        "sde_sample_freq": 4,
+        "use_sde_at_warmup": false,
+        "policy_kwargs": {
+          "net_arch": [
+            64,
+            64
+          ],
+          "log_std_init": -2.0
+        },
+        "n_steps": 3
+      },
+      "actual_timesteps": 100000,
+      "optimizer_updates": 99000,
+      "status": "complete"
+    }
+  ],
+  "limitation": "The selected standalone SAC checkpoint lands, but tracks slowly with oscillatory commands. It was the only successful evaluation checkpoint in its 500,000-step run; the final policy regressed. This is not evidence of reliable convergence."
+}

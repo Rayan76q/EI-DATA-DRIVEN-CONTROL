@@ -1,0 +1,20 @@
+{
+  "training_steps": 151040,
+  "steps": 34,
+  "duration_s": 1.7000000000000002,
+  "outcome": [
+    "crashed",
+    "no_turn"
+  ],
+  "success": false,
+  "episode_return": -11.874583159626017,
+  "altitude_mae_m": 0.2036264778717476,
+  "yaw_mae_rad": 0.4640362759339897,
+  "peak_z": 0.42116743326187134,
+  "final_z": -0.36597853899002075,
+  "final_psi": -1.1702022552490234,
+  "final_vz": -2.7208423614501953,
+  "final_wz": -2.8952672481536865,
+  "climb_fraction": 0.0,
+  "turn_fraction": 0.0
+}

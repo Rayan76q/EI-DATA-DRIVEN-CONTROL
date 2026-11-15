@@ -1,0 +1,22 @@
+{
+  "outcome": [
+    "landed",
+    "has_turned"
+  ],
+  "success": true,
+  "return": 196.92971800640225,
+  "steps": 242,
+  "duration_s": 12.100000000000001,
+  "altitude_mae_m": 0.493941936107768,
+  "yaw_mae_rad": 0.27805000011826486,
+  "peak_altitude_m": 2.0423946380615234,
+  "altitude_hold_time_s": 2.849999999999998,
+  "minimum_altitude_m": -0.30211228132247925,
+  "final_altitude_m": -0.30211228132247925,
+  "final_vz_m_s": -0.07006893306970596,
+  "final_yaw_rad": -6.306992530822754,
+  "final_yaw_speed_rad_s": 0.008473079651594162,
+  "height_target_m": 2,
+  "turn_target_rad": -6.283185307179586,
+  "name": "z2_yaw-360"
+}

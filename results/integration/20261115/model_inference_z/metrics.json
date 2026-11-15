@@ -1,0 +1,20 @@
+{
+  "checkpoint": "/home/rayan768/CS/drone/EI-DATA-DRIVEN-CONTROL/src/model/checkpoints/rnn_z.pt",
+  "mode": "z",
+  "samples": 12,
+  "dt_s": 0.05,
+  "input_size": 1,
+  "output_size": 1,
+  "hidden_size": 32,
+  "input_mean": -0.004098882433027029,
+  "input_scale": 1.7267645597457886,
+  "output_mean": [
+    -9.68746566772461
+  ],
+  "output_scale": [
+    21.440523147583008
+  ],
+  "final_prediction": [
+    -0.2910674679800991
+  ]
+}

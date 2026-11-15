@@ -1,0 +1,15 @@
+{
+  "outcome": "timeout",
+  "landed": false,
+  "return": -2411.6256486177444,
+  "steps": 200,
+  "duration_s": 10.0,
+  "peak_altitude_m": 2.165937662124634,
+  "final_altitude_m": -0.2094106525182724,
+  "final_vertical_velocity_m_s": -0.34235358238220215,
+  "altitude_mae_m": 0.32041937885899086,
+  "rms_delta_u": 1.948233429470774,
+  "policy_training_steps": 500000,
+  "optimizer_updates": 123996,
+  "is_success": false
+}

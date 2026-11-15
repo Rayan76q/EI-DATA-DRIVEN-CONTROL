@@ -1,0 +1,11 @@
+{
+  "steps": 491520,
+  "current_height_m": 5.0,
+  "completed_episodes": 6404,
+  "episodes_by_height": {
+    "5.0": 6404,
+    "2.0": 0,
+    "1.0": 0,
+    "0.5": 0
+  }
+}

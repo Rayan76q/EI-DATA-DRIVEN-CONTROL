@@ -1,0 +1,32 @@
+{
+  "checkpoint": "src/model/checkpoints/rnn_model_thrust_speeds.pt",
+  "sha256": "57c016dee55222c9e24bcae04d12b2ac3edd6b1c73f7036b694322b07e4736f1",
+  "inputs_mean": [
+    -0.0205,
+    0.0014,
+    0,
+    0
+  ],
+  "inputs_std": [
+    6.4559,
+    0.459,
+    0,
+    0
+  ],
+  "outputs_mean": [
+    -9.9011,
+    0.031
+  ],
+  "outputs_std": [
+    20.6719,
+    10.7658
+  ],
+  "raw_input_order": [
+    "thrust",
+    "roll=0",
+    "pitch=0",
+    "yaw"
+  ],
+  "mission": "0m until2s;2m until8s; yaw2pi ramp5to8s,holdthenland;10sdeadline",
+  "ppo_config": "src/policy/config/ppo.json"
+}

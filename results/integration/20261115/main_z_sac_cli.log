@@ -1,0 +1,9 @@
+/home/rayan768/venvs/main_env/lib/python3.13/site-packages/stable_baselines3/common/env_checker.py:515: UserWarning: We recommend you to use a symmetric and normalized Box action space (range=[-1, 1]) cf. https://stable-baselines3.readthedocs.io/en/master/guide/rl_tips.html
+  warnings.warn(
+RNN: /home/rayan768/CS/drone/EI-DATA-DRIVEN-CONTROL/src/model/checkpoints/rnn_z.pt
+Mission: 0 m until 2 s, 2 m until 6 s, then land at -0.3 m
+Policy: /home/rayan768/CS/drone/EI-DATA-DRIVEN-CONTROL/results/altitude/sac/20261106_ztol_warm_start_500k/training/best_model.zip
+Exported /home/rayan768/CS/drone/EI-DATA-DRIVEN-CONTROL/results/integration/20261115/main_z_sac/policy.mat and /home/rayan768/CS/drone/EI-DATA-DRIVEN-CONTROL/results/integration/20261115/main_z_sac/traj_model.mat (151 steps; command error 8.5e-07)
+Result: landed at 7.55 s | peak 2.097 m | final vz -0.431 m/s | return -70.0
+Results: /home/rayan768/CS/drone/EI-DATA-DRIVEN-CONTROL/results/integration/20261115/main_z_sac
+MATLAB/Simulink: skipped

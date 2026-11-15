@@ -1,0 +1,25 @@
+{
+  "outcome": [
+    "timeout",
+    "no_turn"
+  ],
+  "success": false,
+  "return": 124.24652988091111,
+  "steps": 400,
+  "duration_s": 20.0,
+  "altitude_mae_m": 0.4694582028313307,
+  "yaw_mae_rad": 0.6118975502695084,
+  "peak_altitude_m": 1.9642562866210938,
+  "altitude_hold_time_s": 2.5999999999999988,
+  "minimum_altitude_m": -0.14755301177501678,
+  "final_altitude_m": -0.14755301177501678,
+  "final_vz_m_s": -0.0014273789711296558,
+  "final_yaw_rad": 6.733271598815918,
+  "final_yaw_speed_rad_s": 0.00248777330853045,
+  "algorithm": "PPO",
+  "rnn_path": "/home/rayan768/CS/drone/EI-DATA-DRIVEN-CONTROL/src/model/checkpoints/rnn_model_thrust_speeds.pt",
+  "policy_path": "/home/rayan768/CS/drone/EI-DATA-DRIVEN-CONTROL/results/altitude_psi/ppo_audit_normalized_20261106/training/best_model.zip",
+  "seed": 0,
+  "policy_training_steps": 163840,
+  "dynamics_sha256": "b60c4e2b47d3413e34cdf3e2ddc0669795a8274e59a553153f135b4276c5c3e1"
+}

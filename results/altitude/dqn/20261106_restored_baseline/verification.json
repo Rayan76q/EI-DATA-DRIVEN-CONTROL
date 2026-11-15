@@ -1,0 +1,10 @@
+{
+  "kind": "checkpoint restoration with independent reproduction check",
+  "prefix_verified_through_timesteps": 375000,
+  "matching_evaluation_points": 75,
+  "exact_return_match": true,
+  "successful_prefix_evaluations": 6,
+  "original_run": "/home/rayan768/CS/drone/EI-DATA-DRIVEN-CONTROL/results/policy/rl_z_curriculum_20261105_230119/dqn",
+  "original_training_budget": 500000,
+  "verification_stopped_after_exact_reproduction": true
+}

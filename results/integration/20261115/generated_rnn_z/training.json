@@ -1,0 +1,47 @@
+{
+  "metadata": {
+    "mode": "z",
+    "dt": 0.05,
+    "normalization": {
+      "input_mean": [
+        0.6912364959716797
+      ],
+      "input_scale": [
+        0.03388457000255585
+      ],
+      "output_mean": [
+        -1.7138482332229614
+      ],
+      "output_scale": [
+        4.396358013153076
+      ]
+    },
+    "input_features": [
+      "u"
+    ],
+    "output_features": [
+      "az"
+    ],
+    "hidden_size": 32,
+    "head_activation": "linear",
+    "seed": 0,
+    "inputs": "/home/rayan768/CS/drone/EI-DATA-DRIVEN-CONTROL/results/integration/20261115/generated_data/z_inputs.csv",
+    "outputs": "/home/rayan768/CS/drone/EI-DATA-DRIVEN-CONTROL/results/integration/20261115/generated_data/z_outputs.csv",
+    "input_format": "motors",
+    "output_format": "plant",
+    "train_indices": [
+      2,
+      0
+    ],
+    "test_indices": [
+      1
+    ]
+  },
+  "history": [
+    {
+      "epoch": 1,
+      "train_loss": 0.9662910103797913,
+      "test_loss": 0.9971290230751038
+    }
+  ]
+}

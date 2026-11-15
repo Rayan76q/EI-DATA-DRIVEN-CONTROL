@@ -1,0 +1,7 @@
+{
+  "status": "stopped_pilot",
+  "actual_timesteps": 175000,
+  "planned_timesteps": 500000,
+  "successful_evaluations": 0,
+  "reason": "No successful evaluation in 175,000 transitions; retained the independently verified successful SAC candidate. Production training budget remains 500,000."
+}

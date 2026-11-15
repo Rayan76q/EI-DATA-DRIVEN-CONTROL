@@ -1,0 +1,11 @@
+/home/rayan768/venvs/main_env/lib/python3.13/site-packages/stable_baselines3/common/env_checker.py:515: UserWarning: We recommend you to use a symmetric and normalized Box action space (range=[-1, 1]) cf. https://stable-baselines3.readthedocs.io/en/master/guide/rl_tips.html
+  warnings.warn(
+/home/rayan768/venvs/main_env/lib/python3.13/site-packages/stable_baselines3/common/off_policy_algorithm.py:182: UserWarning: `n_steps=3` is ignored because a custom `replay_buffer_class` (`NStepReplayBuffer`) was passed: n-step returns are only set up automatically when `replay_buffer_class` is `None`. To use n-step returns with a custom replay buffer, configure it explicitly, e.g. `replay_buffer_kwargs={"n_steps": 3, "gamma": 0.99}`.
+  warnings.warn(
+RNN: /home/rayan768/CS/drone/EI-DATA-DRIVEN-CONTROL/src/model/checkpoints/rnn_z.pt
+Mission: 0 m until 2 s, 2 m until 6 s, then land at -0.3 m
+Policy: /home/rayan768/CS/drone/EI-DATA-DRIVEN-CONTROL/results/altitude/dqn/20261106_restored_baseline/training/best_model.zip
+Exported /home/rayan768/CS/drone/EI-DATA-DRIVEN-CONTROL/results/integration/20261115/main_z_dqn/policy.mat and /home/rayan768/CS/drone/EI-DATA-DRIVEN-CONTROL/results/integration/20261115/main_z_dqn/traj_model.mat (155 steps; command error 0)
+Result: landed at 7.75 s | peak 2.075 m | final vz -0.050 m/s | return 607.0
+Results: /home/rayan768/CS/drone/EI-DATA-DRIVEN-CONTROL/results/integration/20261115/main_z_dqn
+MATLAB/Simulink: skipped

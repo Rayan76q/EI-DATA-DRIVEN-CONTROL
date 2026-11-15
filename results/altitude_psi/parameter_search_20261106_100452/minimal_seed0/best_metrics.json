@@ -1,0 +1,22 @@
+{
+  "candidate": "minimal_seed0",
+  "checkpoint": "best_model.zip",
+  "training_steps": 120000,
+  "steps": 9,
+  "duration_s": 0.45,
+  "outcome": [
+    "crashed",
+    "no_turn"
+  ],
+  "success": false,
+  "altitude_mae_m": 0.17774424350096119,
+  "yaw_mae_rad": 0.09221429057005379,
+  "peak_z": 0.0,
+  "final_z": -0.3471616208553314,
+  "final_psi": 0.19042286276817322,
+  "final_vz": -0.9455724358558655,
+  "final_wz": 0.4680192172527313,
+  "climb_fraction": 0.0,
+  "turn_fraction": 0.0,
+  "production_reward_return": -16.0832721889019
+}

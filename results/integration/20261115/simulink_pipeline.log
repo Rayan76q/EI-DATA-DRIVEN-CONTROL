@@ -1,0 +1,10 @@
+MATLAB policy check passed: 169 samples, 182 probes, max error 2.62e-07.
+MATLAB RNN check passed: 64 samples, max error 2.92e-06.
+MATLAB policy check passed: 151 samples, 164 probes, max error 1.48e-06.
+MATLAB policy check passed: 155 samples, 168 probes, max error 0.
+MATLAB policy check passed: 237 samples, 262 probes, max error 1.16e-07.
+MATLAB RNN check passed: 64 samples, max error 1.62e-05.
+MATLAB policy check passed: 169 samples, 182 probes, max error 2.62e-07.
+Simulink plant results saved to /home/rayan768/CS/drone/EI-DATA-DRIVEN-CONTROL/results/integration/20261115/plant_z_ppo (RMSE 0.667 m).
+MATLAB policy check passed: 237 samples, 262 probes, max error 1.16e-07.
+Simulink plant results saved to /home/rayan768/CS/drone/EI-DATA-DRIVEN-CONTROL/results/integration/20261115/plant_z_psi_ppo (RMSE 0.577 m).

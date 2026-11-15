@@ -1,0 +1,20 @@
+{
+  "outcome": [
+    "timeout",
+    "no_turn"
+  ],
+  "success": false,
+  "return": 43.14019833505154,
+  "steps": 200,
+  "duration_s": 10.0,
+  "altitude_mae_m": 0.5904614343061112,
+  "yaw_mae_rad": 1.4815629641498538,
+  "peak_altitude_m": 2.023834705352783,
+  "final_altitude_m": 0.36153751611709595,
+  "final_yaw_rad": 6.553587436676025,
+  "algorithm": "PPO",
+  "rnn_path": "/home/rayan768/CS/drone/EI-DATA-DRIVEN-CONTROL/src/model/checkpoints/rnn_model_thrust_speeds.pt",
+  "policy_path": "/home/rayan768/CS/drone/EI-DATA-DRIVEN-CONTROL/results/altitude_psi/parameter_search_20261106_100452/selected_policy/ppo_drone_thrust_speeds.zip",
+  "seed": 0,
+  "policy_training_steps": 380000
+}

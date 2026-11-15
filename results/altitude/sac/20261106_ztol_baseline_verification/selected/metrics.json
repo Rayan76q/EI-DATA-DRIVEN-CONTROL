@@ -1,0 +1,17 @@
+{
+  "outcome": "landed",
+  "landed": true,
+  "return": -215.92837512493134,
+  "steps": 149,
+  "duration_s": 7.45,
+  "peak_altitude_m": 2.089836597442627,
+  "final_altitude_m": -0.30668067932128906,
+  "final_vertical_velocity_m_s": -0.328848659992218,
+  "altitude_mae_m": 0.37484680169055723,
+  "rms_delta_u": 2.0958101724892426,
+  "checkpoint": "/home/rayan768/CS/drone/EI-DATA-DRIVEN-CONTROL/results/altitude/sac/20261105_202000_ztol02/training/best_model.zip",
+  "policy_training_steps": 327680,
+  "optimizer_updates": 81416,
+  "ent_coef": 0.869783878326416,
+  "is_success": true
+}
