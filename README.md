@@ -118,10 +118,6 @@ Results include Python and plant trajectories, plots, metrics and MATLAB logs.
 Success is measured at first touchdown. The plant continues after touchdown
 because it has no contact model. Reference runs use zero plant noise.
 
-```sh
-python -m unittest discover -s tests -p 'test_*.py'
-```
-
 The earlier RL training results remain under `results/altitude/`,
 `results/altitude_psi/` and `results/policy/`. Old source-folder logs and full
 experiment notebooks are archived there too. The optional 3D viewer has one
